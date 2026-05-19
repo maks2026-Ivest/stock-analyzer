@@ -36,23 +36,33 @@ def get_nasdaq100_tickers():
         return []
 
 def get_stoxx600_tickers():
-    """Загружает список STOXX 600 из надёжного CSV-репозитория"""
-    url = 'https://raw.githubusercontent.com/amontalenti/stoxx/main/data/stoxx_600_tickers.csv'
+    """Загружает список STOXX 600 с investing.com через парсинг HTML"""
+    url = 'https://www.investing.com/indices/stoxx-600-components'
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept-Language': 'en-US,en;q=0.9',
+    }
     try:
-        df = pd.read_csv(url)
-        # Определяем название колонки с тикерами (может быть 'Symbol' или 'Ticker')
-        if 'Symbol' in df.columns:
-            tickers = df['Symbol'].tolist()
-        elif 'Ticker' in df.columns:
-            tickers = df['Ticker'].tolist()
-        else:
-            tickers = df.iloc[:, 0].tolist()
-        # Для Yahoo Finance тикеры должны быть в формате с суффиксом биржи (например, .AS, .DE)
-        # Оставляем как есть, yfinance разберётся
+        response = requests.get(url, headers=headers, timeout=15)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+        table = soup.find('table', {'class': 'common-table'})
+        if not table:
+            print("  Не удалось найти таблицу на странице investing.com")
+            return []
+        tickers = []
+        rows = table.find_all('tr')
+        for row in rows[1:]:   # пропускаем заголовок
+            cells = row.find_all('td')
+            if len(cells) > 1:
+                ticker = cells[1].get_text(strip=True)
+                if ticker:
+                    tickers.append(ticker)
         return tickers
     except Exception as e:
-        print(f"Ошибка загрузки STOXX 600: {e}")
-        return []
+        print(f"Ошибка при парсинге STOXX 600: {e}")
+        # Резервный список крупнейших европейских компаний
+        return ['ASML.AS', 'SAP.DE', 'IFX.DE', 'OR.PA', 'TTE.PA', 'SAN.PA', 'NOVO-B.CO', 'MC.PA', 'NESN.SW', 'ULVR.L']
 
 # --- Функция получения метрик (с защитой от ошибок) ---
 def get_stock_metrics(ticker, region):
