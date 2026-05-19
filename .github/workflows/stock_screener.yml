@@ -1,0 +1,30 @@
+name: Ежедневный анализ акций
+
+# 🗓️ Триггеры для запуска:
+on:
+  schedule:
+    - cron: '30 19 * * *' # Запуск каждый день в 22:30 по Москве (19:30 UTC)
+  workflow_dispatch:  # Позволяет запустить скрипт вручную на вкладке Actions
+
+jobs:
+  run-analysis:
+    runs-on: ubuntu-latest  # Бесплатный облачный компьютер
+
+    steps:
+      - name: Получить код
+        uses: actions/checkout@v4
+      - name: Установить Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Установить зависимости
+        run: |
+          pip install --upgrade pip
+          pip install yfinance pandas numpy requests
+      - name: Запустить анализ
+        run: python stock_analyzer.py
+      - name: Сохранить отчёт
+        uses: actions/upload-artifact@v4
+        with:
+          name: stock-report
+          path: stock_report_*.txt
