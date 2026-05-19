@@ -18,68 +18,53 @@ warnings.filterwarnings('ignore')
 # -------------------------------------------------------------------
 
 def get_sp500_tickers():
-    """Загружает список S&P 500 из надёжного CSV-репозитория"""
     url = 'https://raw.githubusercontent.com/datasets/s-and-p-500-companies/main/data/constituents.csv'
     try:
         df = pd.read_csv(url)
-        tickers = df['Symbol'].str.replace('.', '-').tolist()
-        return tickers
+        return df['Symbol'].str.replace('.', '-').tolist()
     except Exception as e:
-        print(f"Ошибка загрузки S&P 500: {e}")
+        print(f"Ошибка S&P 500: {e}")
         return []
 
 def get_nasdaq100_tickers():
-    """Загружает список NASDAQ 100 из надёжного CSV-репозитория"""
     url = 'https://raw.githubusercontent.com/Ate329/top-us-stock-tickers/main/tickers/top_100.csv'
     try:
         df = pd.read_csv(url)
-        tickers = df['Symbol'].str.replace('.', '-').tolist()
-        return tickers
+        return df['Symbol'].str.replace('.', '-').tolist()
     except Exception as e:
-        print(f"Ошибка загрузки NASDAQ 100: {e}")
+        print(f"Ошибка NASDAQ 100: {e}")
         return []
 
 # -------------------------------------------------------------------
-# 2. ЗАГРУЗКА СПИСКА STOXX 600 (ЕВРОПА) С АВТОМАТИЧЕСКИМ ПЕРЕКЛЮЧЕНИЕМ
+# 2. ЗАГРУЗКА STOXX 600 (ЕВРОПА) С ПЕРЕКЛЮЧЕНИЕМ ИСТОЧНИКОВ
 # -------------------------------------------------------------------
 
 def get_stoxx600_from_github():
-    """Пытается загрузить список из публичного GitHub-репозитория (если есть рабочий)"""
-    urls_to_try = [
+    urls = [
         'https://raw.githubusercontent.com/amontalenti/stoxx/main/data/stoxx_600_tickers.csv',
         'https://raw.githubusercontent.com/jamesbcook/STOXX600/main/stoxx600.csv',
     ]
-    for url in urls_to_try:
+    for url in urls:
         try:
             df = pd.read_csv(url)
-            # Определяем колонку с тикерами
             if 'Symbol' in df.columns:
                 tickers = df['Symbol'].tolist()
             elif 'Ticker' in df.columns:
                 tickers = df['Ticker'].tolist()
             else:
                 tickers = df.iloc[:, 0].tolist()
-            # Минимальная проверка: список не должен быть слишком коротким
             if len(tickers) > 400:
-                print(f"  STOXX 600 загружен с GitHub ({len(tickers)} тикеров)")
                 return tickers
         except:
             continue
     return None
 
 def get_stoxx600_from_tradingview():
-    """Парсинг страницы компонентов STOXX 600 на TradingView"""
     url = 'https://www.tradingview.com/markets/stocks/indices/stoxx600-components/'
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        'Accept-Language': 'en-US,en;q=0.9',
-    }
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
     try:
-        response = requests.get(url, headers=headers, timeout=15)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, 'html.parser')
-        # Ищем таблицу или список тикеров – структура может меняться, но часто тикеры лежат в ссылках
-        # Простой вариант: ищем все элементы с атрибутом data-symbol
+        r = requests.get(url, headers=headers, timeout=15)
+        soup = BeautifulSoup(r.text, 'html.parser')
         tickers = []
         for link in soup.find_all('a', href=True):
             href = link['href']
@@ -88,255 +73,292 @@ def get_stoxx600_from_tradingview():
                 if ticker and ticker not in tickers:
                     tickers.append(ticker)
         if len(tickers) > 100:
-            print(f"  STOXX 600 загружен с TradingView ({len(tickers)} тикеров)")
             return tickers
     except:
         pass
     return None
 
 def get_stoxx600_from_investing():
-    """Парсинг страницы investing.com (рабочий резервный вариант)"""
     url = 'https://www.investing.com/indices/stoxx-600-components'
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        'Accept-Language': 'en-US,en;q=0.9',
-    }
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
     try:
-        response = requests.get(url, headers=headers, timeout=15)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, 'html.parser')
-        # Находим таблицу с классом common-table
+        r = requests.get(url, headers=headers, timeout=15)
+        soup = BeautifulSoup(r.text, 'html.parser')
         table = soup.find('table', {'class': 'common-table'})
         if not table:
             return None
         tickers = []
-        rows = table.find_all('tr')
-        for row in rows[1:]:  # пропускаем заголовок
+        for row in table.find_all('tr')[1:]:
             cells = row.find_all('td')
             if len(cells) > 1:
                 ticker = cells[1].get_text(strip=True)
                 if ticker:
                     tickers.append(ticker)
         if len(tickers) > 100:
-            print(f"  STOXX 600 загружен с Investing.com ({len(tickers)} тикеров)")
             return tickers
     except:
         pass
     return None
 
 def get_stoxx600_tickers():
-    """
-    Загружает список STOXX 600, последовательно перебирая источники.
-    Возвращает список тикеров (если всё сработало) или резервный короткий список.
-    """
     print("Загружаю STOXX 600...")
-    
     tickers = get_stoxx600_from_github()
     if tickers:
+        print(f"  GitHub: {len(tickers)} тикеров")
         return tickers
-    
     tickers = get_stoxx600_from_tradingview()
     if tickers:
+        print(f"  TradingView: {len(tickers)} тикеров")
         return tickers
-    
     tickers = get_stoxx600_from_investing()
     if tickers:
+        print(f"  Investing.com: {len(tickers)} тикеров")
         return tickers
-    
-    # Резервный список крупнейших европейских компаний (чтобы анализ не остановился)
     fallback = ['ASML.AS', 'SAP.DE', 'IFX.DE', 'OR.PA', 'TTE.PA', 'SAN.PA', 'NOVO-B.CO', 'MC.PA', 'NESN.SW', 'ULVR.L']
-    print(f"  Не удалось загрузить полный список STOXX 600. Использую резервный из {len(fallback)} акций.")
+    print(f"  Использую резервный список ({len(fallback)} акций)")
     return fallback
 
 # -------------------------------------------------------------------
-# 3. ФУНКЦИЯ ПОЛУЧЕНИЯ МЕТРИК ПО ТИКЕРУ
+# 3. ФУНКЦИЯ ПОЛУЧЕНИЯ МЕТРИК ДЛЯ СКРИНИНГА (быстрая)
 # -------------------------------------------------------------------
 
-def get_stock_metrics(ticker, region):
+def get_fast_metrics(ticker, region):
     try:
         stock = yf.Ticker(ticker)
         info = stock.info
-        
         pe = info.get('trailingPE')
         peg = info.get('pegRatio')
         roe = info.get('returnOnEquity')
         revenue_growth = None
-        
-        # Попытка получить рост выручки
         try:
-            financials = stock.financials
-            if 'Total Revenue' in financials.index:
-                revenue = financials.loc['Total Revenue']
-                if len(revenue) >= 3:
-                    first = revenue.iloc[-1]
-                    last = revenue.iloc[0]
-                    years = len(revenue) - 1
+            fin = stock.financials
+            if 'Total Revenue' in fin.index:
+                rev = fin.loc['Total Revenue']
+                if len(rev) >= 3:
+                    first = rev.iloc[-1]
+                    last = rev.iloc[0]
+                    years = len(rev) - 1
                     revenue_growth = (last / first) ** (1/years) - 1
         except:
             pass
-        
-        # Расчёт Total Score (алгоритм из предыдущих версий)
-        total_score = 0
+        total = 0
         if peg and peg < 1.0:
-            total_score += 3
+            total += 3
         elif peg and peg < 1.3:
-            total_score += 1
-        
+            total += 1
         if pe:
             if region == 'US' and pe < 15:
-                total_score += 2
+                total += 2
             elif region == 'EU' and pe < 12:
-                total_score += 2
+                total += 2
             elif pe < 20:
-                total_score += 1
-        
+                total += 1
         if roe:
             if region == 'US' and roe > 0.15:
-                total_score += 2
+                total += 2
             elif region == 'EU' and roe > 0.12:
-                total_score += 2
+                total += 2
             elif roe > 0.10:
-                total_score += 1
-        
+                total += 1
         if revenue_growth and revenue_growth > 0.10:
-            total_score += 2
+            total += 2
         elif revenue_growth and revenue_growth > 0.05:
-            total_score += 1
-        
-        if total_score == 0:
+            total += 1
+        if total == 0:
             return None
-        
-        return {
-            'ticker': ticker,
-            'region': region,
-            'pe': pe,
-            'peg': peg,
-            'roe': roe,
-            'revenue_growth': revenue_growth,
-            'total': total_score
-        }
-    except Exception:
+        return {'ticker': ticker, 'region': region, 'pe': pe, 'peg': peg, 'roe': roe,
+                'revenue_growth': revenue_growth, 'total': total}
+    except:
         return None
 
 # -------------------------------------------------------------------
-# 4. ОТПРАВКА В TELEGRAM
+# 4. ФУНКЦИЯ ГЛУБОКОГО АНАЛИЗА (для одного тикера)
+# -------------------------------------------------------------------
+
+def get_company_info(ticker):
+    stock = yf.Ticker(ticker)
+    info = stock.info
+    data = {
+        'name': info.get('longName', 'N/A'),
+        'sector': info.get('sector', 'N/A'),
+        'industry': info.get('industry', 'N/A'),
+        'country': info.get('country', 'N/A'),
+        'website': info.get('website', 'N/A'),
+        'summary': info.get('longBusinessSummary', 'Нет описания'),
+        'market_cap': info.get('marketCap', 'N/A'),
+        'pe': info.get('trailingPE', 'N/A'),
+        'forward_pe': info.get('forwardPE', 'N/A'),
+        'peg': info.get('pegRatio', 'N/A'),
+        'pb': info.get('priceToBook', 'N/A'),
+        'roe': info.get('returnOnEquity', 'N/A'),
+        'roa': info.get('returnOnAssets', 'N/A'),
+        'debt_to_equity': info.get('debtToEquity', 'N/A'),
+        'current_ratio': info.get('currentRatio', 'N/A'),
+        'dividend_yield': info.get('dividendYield', 'N/A'),
+        'fcf_yield': info.get('freeCashflowYield', 'N/A'),
+        'beta': info.get('beta', 'N/A'),
+        'profit_margin': info.get('profitMargins', 'N/A'),
+        'operating_margin': info.get('operatingMargins', 'N/A'),
+        'revenue_growth': None,
+        'eps_growth': None,
+    }
+    # Рост выручки
+    try:
+        fin = stock.financials
+        if 'Total Revenue' in fin.index:
+            rev = fin.loc['Total Revenue']
+            if len(rev) >= 3:
+                data['revenue_growth'] = (rev.iloc[0] / rev.iloc[-1]) ** (1/(len(rev)-1)) - 1
+    except:
+        pass
+    # Рост EPS
+    try:
+        earn = stock.earnings
+        if earn is not None and len(earn) >= 3:
+            eps = earn['earnings']
+            data['eps_growth'] = (eps.iloc[0] / eps.iloc[-1]) ** (1/(len(eps)-1)) - 1
+    except:
+        pass
+    return data, stock
+
+def generate_deep_analysis(ticker, data):
+    lines = []
+    lines.append(f"🔍 **ГЛУБОКИЙ АНАЛИЗ: {ticker.upper()} – {data['name']}**\n")
+    lines.append(f"Сектор: {data['sector']} | Индустрия: {data['industry']} | Страна: {data['country']}")
+    if data['summary'] != 'Нет описания':
+        summary = data['summary'][:500] + "…" if len(data['summary']) > 500 else data['summary']
+        lines.append(f"\n📝 **Описание**: {summary}")
+    
+    lines.append("\n💰 **Финансы**")
+    lines.append(f"Капитализация: {data['market_cap']:,}")
+    lines.append(f"P/E (TTM): {data['pe']:.2f}" if isinstance(data['pe'], (int,float)) else f"P/E: {data['pe']}")
+    lines.append(f"Forward P/E: {data['forward_pe']:.2f}" if isinstance(data['forward_pe'], (int,float)) else "")
+    lines.append(f"PEG: {data['peg']:.2f}" if isinstance(data['peg'], (int,float)) else f"PEG: {data['peg']}")
+    lines.append(f"ROE: {data['roe']*100:.1f}%" if isinstance(data['roe'], (int,float)) else f"ROE: {data['roe']}")
+    lines.append(f"Долг/Equity: {data['debt_to_equity']:.2f}" if isinstance(data['debt_to_equity'], (int,float)) else "")
+    lines.append(f"FCF Yield: {data['fcf_yield']*100:.1f}%" if isinstance(data['fcf_yield'], (int,float)) else "")
+    lines.append(f"Дивиденды: {data['dividend_yield']*100:.1f}%" if isinstance(data['dividend_yield'], (int,float)) else "Дивидендов нет")
+    
+    if data['revenue_growth']:
+        lines.append(f"\n📈 Рост выручки (3 года CAGR): {data['revenue_growth']*100:.1f}%")
+    if data.get('eps_growth'):
+        lines.append(f"Рост EPS (3 года CAGR): {data['eps_growth']*100:.1f}%")
+    
+    lines.append("\n⚠️ **Риски**")
+    risks = []
+    if isinstance(data['debt_to_equity'], (int,float)) and data['debt_to_equity'] > 1.0:
+        risks.append(f"• Высокий долг (D/E = {data['debt_to_equity']:.2f})")
+    if isinstance(data['current_ratio'], (int,float)) and data['current_ratio'] < 1.0:
+        risks.append(f"• Низкая ликвидность (Current Ratio = {data['current_ratio']:.2f})")
+    if isinstance(data['pe'], (int,float)) and data['pe'] > 30:
+        risks.append(f"• Высокий P/E ({data['pe']:.1f}) – возможна переоценка")
+    if isinstance(data['peg'], (int,float)) and data['peg'] > 1.5:
+        risks.append(f"• Переоцененность роста (PEG = {data['peg']:.2f})")
+    if not risks:
+        risks.append("• Нет очевидных финансовых красных флагов.")
+    for r in risks:
+        lines.append(r)
+    
+    lines.append("\n📌 **Вердикт**")
+    if isinstance(data['peg'], (int,float)) and data['peg'] < 1.0 and isinstance(data['pe'], (int,float)) and data['pe'] < 20:
+        lines.append("✅ Компания выглядит **недооцененной**. Рассмотрите покупку.")
+    elif isinstance(data['peg'], (int,float)) and data['peg'] > 1.5:
+        lines.append("⚠️ Акция **переоценена**. Лучше дождаться коррекции.")
+    else:
+        lines.append("🟡 Нейтральная оценка. Требуется ручное изучение конкурентных преимуществ.")
+    
+    lines.append(f"\n🔗 [Yahoo Finance](https://finance.yahoo.com/quote/{ticker})")
+    return "\n".join(lines)
+
+# -------------------------------------------------------------------
+# 5. ОТПРАВКА В TELEGRAM
 # -------------------------------------------------------------------
 
 def send_to_telegram(message):
     token = os.environ.get('TELEGRAM_TOKEN')
     chat_id = os.environ.get('TELEGRAM_CHAT_ID')
-    
     if not token or not chat_id:
-        print("⚠️ Telegram токен или chat_id не найдены")
+        print("⚠️ Нет токена или chat_id")
         return
-    
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     if len(message) > 4096:
         message = message[:4093] + "..."
-    
     try:
-        response = requests.post(url, json={'chat_id': chat_id, 'text': message}, timeout=10)
-        if response.status_code == 200:
-            print("✅ Отчёт отправлен в Telegram")
-        else:
-            print(f"❌ Ошибка отправки: {response.text}")
+        requests.post(url, json={'chat_id': chat_id, 'text': message}, timeout=10)
+        print("✅ Отправлено")
     except Exception as e:
-        print(f"❌ Ошибка соединения: {e}")
+        print(f"Ошибка отправки: {e}")
 
 # -------------------------------------------------------------------
-# 5. ОСНОВНАЯ ФУНКЦИЯ АНАЛИЗА
+# 6. ОСНОВНАЯ ФУНКЦИЯ (скрининг + глубокий анализ топ-10)
 # -------------------------------------------------------------------
 
 def run_analysis():
-    print(f"📊 Анализ запущен {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+    print(f"📊 Старт {datetime.now()}\n")
     
-    # Загрузка списков США
-    print("Загружаю список S&P 500...")
+    # Загрузка списков
     sp500 = get_sp500_tickers()
-    print(f"S&P 500: {len(sp500)} тикеров")
-    
-    print("Загружаю список NASDAQ 100...")
     nasdaq100 = get_nasdaq100_tickers()
-    print(f"NASDAQ 100: {len(nasdaq100)} тикеров")
-    
-    # Загрузка списка Европы
     stoxx600 = get_stoxx600_tickers()
-    print(f"STOXX 600: {len(stoxx600)} тикеров")
     
-    # Объединение тикеров США (без дубликатов)
     us_tickers = list(set(sp500 + nasdaq100))
     eu_tickers = stoxx600
     
-    print(f"\n🇺🇸 Всего уникальных тикеров США: {len(us_tickers)}")
-    print(f"🇪🇺 Всего тикеров Европы: {len(eu_tickers)}")
+    print(f"🇺🇸 США: {len(us_tickers)} тикеров")
+    print(f"🇪🇺 Европа: {len(eu_tickers)} тикеров")
     
     all_results = []
     
-    # Анализ США
-    print("\n🇺🇸 Анализ компаний США...")
-    for i, ticker in enumerate(us_tickers):
+    # Быстрый скрининг США
+    print("\n🇺🇸 Сканирование США...")
+    for i, t in enumerate(us_tickers):
         if i % 50 == 0:
-            print(f"  Обработано {i} из {len(us_tickers)}...")
-        m = get_stock_metrics(ticker, 'US')
+            print(f"  {i}/{len(us_tickers)}")
+        m = get_fast_metrics(t, 'US')
         if m:
             all_results.append(m)
-        time.sleep(0.25)  # задержка 250 мс
+        time.sleep(0.2)
     
-    # Анализ Европы
-    print("\n🇪🇺 Анализ компаний Европы...")
-    for i, ticker in enumerate(eu_tickers):
+    # Быстрый скрининг Европы
+    print("\n🇪🇺 Сканирование Европы...")
+    for i, t in enumerate(eu_tickers):
         if i % 50 == 0:
-            print(f"  Обработано {i} из {len(eu_tickers)}...")
-        m = get_stock_metrics(ticker, 'EU')
+            print(f"  {i}/{len(eu_tickers)}")
+        m = get_fast_metrics(t, 'EU')
         if m:
             all_results.append(m)
-        time.sleep(0.25)
+        time.sleep(0.2)
     
-    # Сортировка результатов
+    # Сортировка
     all_results.sort(key=lambda x: x['total'], reverse=True)
+    top10 = all_results[:10]
     
-    # Формирование текста отчёта
-    report_lines = []
-    report_lines.append("=" * 60)
-    report_lines.append(f"📈 ОТЧЁТ ПО АКЦИЯМ | {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    report_lines.append("=" * 60)
+    # Отправка краткого отчёта с топ-10
+    brief = "="*50 + f"\n📈 ТОП-10 КАНДИДАТОВ\n" + "="*50 + "\n"
+    for i, r in enumerate(top10, 1):
+        brief += f"{i}. {r['ticker']} ({r['region']}) | Total: {r['total']:.1f}\n"
+        if r.get('peg'):
+            brief += f"   PEG: {r['peg']:.2f}  P/E: {r['pe']:.1f}  ROE: {r['roe']*100:.1f}%\n"
+        else:
+            brief += f"   P/E: {r['pe']:.1f}\n"
+    brief += "="*50 + "\n⚠️ Не ИИР\n"
+    send_to_telegram(brief)
     
-    if not all_results:
-        report_lines.append("\n⚠️ Не найдено компаний, соответствующих критериям.")
-        report_lines.append("Попробуйте ослабить фильтры (PEG, P/E, ROE).")
-    else:
-        report_lines.append("\n🏆 ТОП КАНДИДАТОВ ДЛЯ ДАЛЬНЕЙШЕГО ИЗУЧЕНИЯ:\n")
-        for i, r in enumerate(all_results[:10], 1):
-            report_lines.append(f"{i}. {r['ticker']} ({r['region']}) | Total: {r['total']:.1f}")
-            if r.get('peg'):
-                if r.get('pe') and r.get('roe'):
-                    report_lines.append(f"   PEG: {r['peg']:.2f} | P/E: {r['pe']:.1f} | ROE: {r['roe']*100:.1f}%")
-                else:
-                    report_lines.append(f"   PEG: {r['peg']:.2f}")
-            if r.get('revenue_growth'):
-                report_lines.append(f"   Рост выручки: {r['revenue_growth']*100:.1f}% годовых")
-            report_lines.append("")
-        
-        avg_peg = np.mean([r['peg'] for r in all_results if r.get('peg')])
-        report_lines.append(f"📊 Всего проанализировано: {len(all_results)} компаний")
-        report_lines.append(f"Средний PEG среди найденных: {avg_peg:.2f}")
+    # Теперь для каждого из топ-10 – глубокий анализ
+    for r in top10:
+        ticker = r['ticker']
+        print(f"\n🔍 Глубокий анализ {ticker}...")
+        data, _ = get_company_info(ticker)
+        deep_report = generate_deep_analysis(ticker, data)
+        # Добавим заголовок, чтобы не спутать с основным отчётом
+        send_to_telegram(f"🧠 *Глубокий анализ {ticker}*\n\n{deep_report}")
+        time.sleep(1)  # пауза между отправками, чтобы не забанили
     
-    report_lines.append("\n" + "=" * 60)
-    report_lines.append("⚠️ Дисклеймер: Не индивидуальная инвестиционная рекомендация.")
-    report_lines.append("   Изучите бизнес самостоятельно перед принятием решения.")
-    report_lines.append("=" * 60)
-    
-    return "\n".join(report_lines)
+    print("\n✅ Все отчёты отправлены")
 
 # -------------------------------------------------------------------
-# 6. ТОЧКА ВХОДА
+# 7. ЗАПУСК
 # -------------------------------------------------------------------
 
 if __name__ == "__main__":
-    report = run_analysis()
-    print(report)
-    send_to_telegram(report)
-    
-    # Сохранение отчёта в файл (для артефактов GitHub)
-    with open(f"stock_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt", "w", encoding="utf-8") as f:
-        f.write(report)
+    run_analysis()
