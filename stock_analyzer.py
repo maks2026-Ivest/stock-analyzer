@@ -26,7 +26,7 @@ def get_sp500_tickers():
 
 def get_nasdaq100_tickers():
     """Загружает список NASDAQ 100 из надёжного CSV-репозитория"""
-    url = 'https://raw.githubusercontent.com/fiscalnote/stock-list/main/data/nasdaq-100.csv'
+    url = 'https://raw.githubusercontent.com/Ate329/top-us-stock-tickers/main/tickers/top_100.csv'
     try:
         df = pd.read_csv(url)
         tickers = df['Symbol'].str.replace('.', '-').tolist()
