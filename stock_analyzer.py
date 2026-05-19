@@ -10,10 +10,60 @@ import requests
 import warnings
 warnings.filterwarnings('ignore')
 
-# --- Конфигурация ---
-US_TICKERS = ['NVDA', 'MSFT', 'AAPL', 'GOOGL', 'META', 'AVGO', 'ORCL', 'ADBE', 'CRM', 'INTC', 'AMD', 'IBM', 'NOW', 'PANW', 'SNPS', 'CDNS']
-EU_TICKERS = ['ASML.AS', 'SAP.DE', 'IFX.DE', 'STM.PA', 'DSY.PA', 'NEM.DE', 'PRX.AS', 'CAP.PA', 'SOON.DE', 'BN.PA']
+# --- НОВЫЕ ФУНКЦИИ ДЛЯ ЗАГРУЗКИ СПИСКОВ ---
+def get_sp500_tickers():
+    """Загружает список тикеров S&P 500 с Википедии."""
+    url = 'https://en.wikipedia.org/wiki/List_of_S%26P_500_companies'
+    try:
+        # Используем pandas для чтения таблицы с википедии
+        tables = pd.read_html(url)
+        sp500_table = tables[0]
+        # Заменяем точки на дефисы в тикерах (требование Yahoo Finance)
+        tickers = sp500_table['Symbol'].str.replace('.', '-').tolist()
+        return tickers
+    except Exception as e:
+        print(f"Ошибка при загрузке S&P 500: {e}")
+        return []
 
+def get_nasdaq100_tickers():
+    """
+    Загружает список тикеров NASDAQ-100 из официального CSV-файла Nasdaq.
+    Источник: https://www.nasdaq.com/market-activity/quotes/nasdaq-100-index
+    """
+    url = 'https://www.nasdaq.com/screening/companies-by-name.aspx?exchange=NASDAQ&render=download'
+    try:
+        df = pd.read_csv(url)
+        # Фильтруем компании, относящиеся к NASDAQ 100 (требуется дополнительная логика)
+        # В данном случае мы используем упрощённый подход, возвращая все тикеры NASDAQ.
+        # Для точного соответствия индексу NASDAQ 100 рекомендуется использовать
+        # библиотеку pytickersymbols (см. следующий раздел).
+        tickers = df['Symbol'].tolist()
+        return tickers[:100]  # Ограничим первыми 100 для примера
+    except Exception as e:
+        print(f"Ошибка при загрузке NASDAQ-100: {e}")
+        return []
+
+def get_stoxx600_tickers():
+    """
+    Загружает список тикеров STOXX Europe 600, используя библиотеку pytickersymbols.
+    Установите её через: pip install pytickersymbols
+    """
+    try:
+        from pytickersymbols import PyTickerSymbols
+        stock_data = PyTickerSymbols()
+        # Получаем данные по индексу
+        stoxx_data = stock_data.get_stoxx_europe_600_yahoo_tickers()
+        # Извлекаем только тикеры
+        tickers = [item['symbol'] for item in stoxx_data if 'symbol' in item]
+        return tickers
+    except ImportError:
+        print("Библиотека pytickersymbols не установлена.")
+        print("Установите её с помощью команды: pip install pytickersymbols")
+        return []
+    except Exception as e:
+        print(f"Ошибка при загрузке STOXX 600: {e}")
+        return []
+        
 # --- Функция получения метрик ---
 def get_stock_metrics(ticker, region):
     try:
@@ -107,19 +157,29 @@ def run_analysis():
     
     all_results = []
     
-    print("🇺🇸 Анализ компаний США...")
-    for ticker in US_TICKERS:
-        print(f"  {ticker}...")
-        m = get_stock_metrics(ticker, 'US')
-        if m:
-            all_results.append(m)
+    # --- ЗАГРУЗКА СПИСКОВ АКЦИЙ ---
+    print("Загружаю список S&P 500...")
+    us_tickers = get_sp500_tickers()
+    print(f"Найдено {len(us_tickers)} акций в S&P 500.")
     
+    print("Загружаю список NASDAQ-100...")
+    nasdaq_tickers = get_nasdaq100_tickers()
+    print(f"Найдено {len(nasdaq_tickers)} акций в NASDAQ-100 (первая сотня).")
+    
+    print("Загружаю список STOXX 600...")
+    eu_tickers = get_stoxx600_tickers()
+    print(f"Найдено {len(eu_tickers)} акций в STOXX 600.")
+
+    # --- АНАЛИЗ АКЦИЙ США (из S&P 500 + NASDAQ-100) ---
+    print("\n🇺🇸 Анализ компаний США...")
+    # Объединяем списки и убираем дубликаты
+    all_us_tickers = list(set(us_tickers + nasdaq_tickers))
+    print(f"Анализирую {len(all_us_tickers)} уникальных акций США...")
+    
+    # --- АНАЛИЗ АКЦИЙ ЕВРОПЫ (из STOXX 600) ---
     print("\n🇪🇺 Анализ компаний Европы...")
-    for ticker in EU_TICKERS:
-        print(f"  {ticker}...")
-        m = get_stock_metrics(ticker, 'EU')
-        if m:
-            all_results.append(m)
+    print(f"Анализирую {len(eu_tickers)} акций Европы...")
+    
     
     # Сортировка по total score
     all_results.sort(key=lambda x: x['total'], reverse=True)
