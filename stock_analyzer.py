@@ -333,7 +333,7 @@ def run_analysis():
     all_results.sort(key=lambda x: x['total'], reverse=True)
     top10 = all_results[:10]
     
-    # Отправка краткого отчёта с топ-10
+    # Краткий отчёт с топ-10
     brief = "="*50 + f"\n📈 ТОП-10 КАНДИДАТОВ\n" + "="*50 + "\n"
     for i, r in enumerate(top10, 1):
         brief += f"{i}. {r['ticker']} ({r['region']}) | Total: {r['total']:.1f}\n"
@@ -341,7 +341,14 @@ def run_analysis():
             brief += f"   PEG: {r['peg']:.2f}  P/E: {r['pe']:.1f}  ROE: {r['roe']*100:.1f}%\n"
         else:
             brief += f"   P/E: {r['pe']:.1f}\n"
+    
+    # --- Добавленная статистика ---
+    total_analyzed = len(all_results)
+    avg_peg = np.mean([r['peg'] for r in all_results if r.get('peg')]) if total_analyzed > 0 else 0
+    brief += f"\n📊 Всего проанализировано: {total_analyzed} компаний\n"
+    brief += f"📊 Средний PEG среди найденных: {avg_peg:.2f}\n"
     brief += "="*50 + "\n⚠️ Не ИИР\n"
+    
     send_to_telegram(brief)
     
     # Теперь для каждого из топ-10 – глубокий анализ
