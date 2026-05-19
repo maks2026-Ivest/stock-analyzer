@@ -237,3 +237,5 @@ if __name__ == "__main__":
     report = run_analysis()
     print(report)
     send_to_telegram(report)
+    with open(f"stock_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt", "w", encoding="utf-8") as f:
+    f.write(report)
