@@ -1,0 +1,23 @@
+name: Temp Fetch Tickers
+
+on: workflow_dispatch
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install dependencies
+        run: pip install pandas requests
+      - name: Run fetch_tickers.py
+        run: python fetch_tickers.py
+      - name: Upload CSVs as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ticker-lists
+          path: |
+            us_tickers.csv
+            eu_tickers.csv
