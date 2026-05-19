@@ -206,23 +206,26 @@ def run_analysis():
     # Формируем отчёт
     report_lines = []
     report_lines.append("=" * 60)
-    report_lines.append(f"📈 ОТЧЁТ ПО АКЦИЯМ | {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+       report_lines.append(f"📈 ОТЧЁТ ПО АКЦИЯМ | {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     report_lines.append("=" * 60)
     
     # Топ-10 лучших
     report_lines.append("\n🏆 ТОП КАНДИДАТОВ ДЛЯ ДАЛЬНЕЙШЕГО ИЗУЧЕНИЯ:\n")
     
     for i, r in enumerate(all_results[:10], 1):
-        report_lines.append(f"{i}. {r['ticker']} ({r['region']}) | Total: {r['total']:.1f}/10")
+        report_lines.append(f"{i}. {r['ticker']} ({r['region']}) | Total: {r['total']:.1f}")
         if r.get('peg'):
-            report_lines.append(f"   PEG: {r['peg']:.2f} | P/E: {r['pe']:.1f} | ROE: {r['roe']*100:.1f}%" if r.get('roe') else f"   PEG: {r['peg']:.2f}")
+            if r.get('pe') and r.get('roe'):
+                report_lines.append(f"   PEG: {r['peg']:.2f} | P/E: {r['pe']:.1f} | ROE: {r['roe']*100:.1f}%")
+            else:
+                report_lines.append(f"   PEG: {r['peg']:.2f}")
         if r.get('revenue_growth'):
             report_lines.append(f"   Рост выручки: {r['revenue_growth']*100:.1f}% годовых")
         report_lines.append("")
     
     # Сигналы
     if all_results and all_results[0].get('peg') and all_results[0]['peg'] < 0.7:
-        report_lines.append("🔔 СИГНАЛ: Найдены компании с PEG < 0.7 — потенциальная недооценка!")
+        report_lines.append("🔔 СИГНАЛ: Найдены компании с PEG < 0.7 – потенциальная недооценка!")
     
     report_lines.append("\n" + "=" * 60)
     report_lines.append("⚠️ Дисклеймер: Не индивидуальная инвестиционная рекомендация.")
@@ -231,11 +234,13 @@ def run_analysis():
     
     return "\n".join(report_lines)
 
-# ========================== ЗАПУСК ==========================
 
+# --- ЗАПУСК ---
 if __name__ == "__main__":
     report = run_analysis()
     print(report)
     send_to_telegram(report)
+    
+    # Сохраняем файл (обратите внимание на отступ перед f.write)
     with open(f"stock_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt", "w", encoding="utf-8") as f:
-    f.write(report)
+        f.write(report)
