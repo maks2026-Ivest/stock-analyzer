@@ -7,64 +7,54 @@ import numpy as np
 from datetime import datetime
 import os
 import requests
+import time
 import warnings
 warnings.filterwarnings('ignore')
 
-# --- НОВЫЕ ФУНКЦИИ ДЛЯ ЗАГРУЗКИ СПИСКОВ ---
+# --- НАДЁЖНЫЕ ФУНКЦИИ ЗАГРУЗКИ СПИСКОВ (без Wikipedia, с прямыми CSV) ---
+
 def get_sp500_tickers():
-    """Загружает список тикеров S&P 500 с Википедии."""
-    url = 'https://en.wikipedia.org/wiki/List_of_S%26P_500_companies'
+    """Загружает список S&P 500 из надёжного CSV-репозитория"""
+    url = 'https://raw.githubusercontent.com/datasets/s-and-p-500-companies/main/data/constituents.csv'
     try:
-        # Используем pandas для чтения таблицы с википедии
-        tables = pd.read_html(url)
-        sp500_table = tables[0]
-        # Заменяем точки на дефисы в тикерах (требование Yahoo Finance)
-        tickers = sp500_table['Symbol'].str.replace('.', '-').tolist()
+        df = pd.read_csv(url)
+        tickers = df['Symbol'].str.replace('.', '-').tolist()
         return tickers
     except Exception as e:
-        print(f"Ошибка при загрузке S&P 500: {e}")
+        print(f"Ошибка загрузки S&P 500: {e}")
         return []
 
 def get_nasdaq100_tickers():
-    """
-    Загружает список тикеров NASDAQ-100 из официального CSV-файла Nasdaq.
-    Источник: https://www.nasdaq.com/market-activity/quotes/nasdaq-100-index
-    """
-    url = 'https://www.nasdaq.com/screening/companies-by-name.aspx?exchange=NASDAQ&render=download'
+    """Загружает список NASDAQ 100 из надёжного CSV-репозитория"""
+    url = 'https://raw.githubusercontent.com/fiscalnote/stock-list/main/data/nasdaq-100.csv'
     try:
         df = pd.read_csv(url)
-        # Фильтруем компании, относящиеся к NASDAQ 100 (требуется дополнительная логика)
-        # В данном случае мы используем упрощённый подход, возвращая все тикеры NASDAQ.
-        # Для точного соответствия индексу NASDAQ 100 рекомендуется использовать
-        # библиотеку pytickersymbols (см. следующий раздел).
-        tickers = df['Symbol'].tolist()
-        return tickers[:100]  # Ограничим первыми 100 для примера
+        tickers = df['Symbol'].str.replace('.', '-').tolist()
+        return tickers
     except Exception as e:
-        print(f"Ошибка при загрузке NASDAQ-100: {e}")
+        print(f"Ошибка загрузки NASDAQ 100: {e}")
         return []
 
 def get_stoxx600_tickers():
-    """
-    Загружает список тикеров STOXX Europe 600, используя библиотеку pytickersymbols.
-    Установите её через: pip install pytickersymbols
-    """
+    """Загружает список STOXX 600 из надёжного CSV-репозитория"""
+    url = 'https://raw.githubusercontent.com/amontalenti/stoxx/main/data/stoxx_600_tickers.csv'
     try:
-        from pytickersymbols import PyTickerSymbols
-        stock_data = PyTickerSymbols()
-        # Получаем данные по индексу
-        stoxx_data = stock_data.get_stoxx_europe_600_yahoo_tickers()
-        # Извлекаем только тикеры
-        tickers = [item['symbol'] for item in stoxx_data if 'symbol' in item]
+        df = pd.read_csv(url)
+        # Определяем название колонки с тикерами (может быть 'Symbol' или 'Ticker')
+        if 'Symbol' in df.columns:
+            tickers = df['Symbol'].tolist()
+        elif 'Ticker' in df.columns:
+            tickers = df['Ticker'].tolist()
+        else:
+            tickers = df.iloc[:, 0].tolist()
+        # Для Yahoo Finance тикеры должны быть в формате с суффиксом биржи (например, .AS, .DE)
+        # Оставляем как есть, yfinance разберётся
         return tickers
-    except ImportError:
-        print("Библиотека pytickersymbols не установлена.")
-        print("Установите её с помощью команды: pip install pytickersymbols")
-        return []
     except Exception as e:
-        print(f"Ошибка при загрузке STOXX 600: {e}")
+        print(f"Ошибка загрузки STOXX 600: {e}")
         return []
-        
-# --- Функция получения метрик ---
+
+# --- Функция получения метрик (с защитой от ошибок) ---
 def get_stock_metrics(ticker, region):
     try:
         stock = yf.Ticker(ticker)
@@ -75,7 +65,7 @@ def get_stock_metrics(ticker, region):
         roe = info.get('returnOnEquity')
         revenue_growth = None
         
-        # Пытаемся получить рост выручки
+        # Рост выручки (необязательно, если не получится — пропускаем)
         try:
             financials = stock.financials
             if 'Total Revenue' in financials.index:
@@ -88,7 +78,7 @@ def get_stock_metrics(ticker, region):
         except:
             pass
         
-        # Рассчитываем Total Score
+        # Расчёт Total Score
         total_score = 0
         if peg and peg < 1.0:
             total_score += 3
@@ -116,6 +106,10 @@ def get_stock_metrics(ticker, region):
         elif revenue_growth and revenue_growth > 0.05:
             total_score += 1
         
+        # Если нет ни PEG, ни P/E, ни ROE — не включаем в результат
+        if total_score == 0:
+            return None
+        
         return {
             'ticker': ticker,
             'region': region,
@@ -125,8 +119,8 @@ def get_stock_metrics(ticker, region):
             'revenue_growth': revenue_growth,
             'total': total_score
         }
-    except Exception as e:
-        print(f"Ошибка {ticker}: {e}")
+    except Exception:
+        # Не выводим ошибку для каждого тикера, чтобы не засорять лог
         return None
 
 # --- Функция отправки в Telegram ---
@@ -155,33 +149,49 @@ def send_to_telegram(message):
 def run_analysis():
     print(f"📊 Анализ запущен {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
     
-    all_results = []
-    
-    # --- ЗАГРУЗКА СПИСКОВ АКЦИЙ ---
+    # Загружаем списки
     print("Загружаю список S&P 500...")
-    us_tickers = get_sp500_tickers()
-    print(f"Найдено {len(us_tickers)} акций в S&P 500.")
+    sp500 = get_sp500_tickers()
+    print(f"S&P 500: {len(sp500)} тикеров")
     
-    print("Загружаю список NASDAQ-100...")
-    nasdaq_tickers = get_nasdaq100_tickers()
-    print(f"Найдено {len(nasdaq_tickers)} акций в NASDAQ-100 (первая сотня).")
+    print("Загружаю список NASDAQ 100...")
+    nasdaq100 = get_nasdaq100_tickers()
+    print(f"NASDAQ 100: {len(nasdaq100)} тикеров")
     
     print("Загружаю список STOXX 600...")
-    eu_tickers = get_stoxx600_tickers()
-    print(f"Найдено {len(eu_tickers)} акций в STOXX 600.")
-
-    # --- АНАЛИЗ АКЦИЙ США (из S&P 500 + NASDAQ-100) ---
+    stoxx600 = get_stoxx600_tickers()
+    print(f"STOXX 600: {len(stoxx600)} тикеров")
+    
+    # Объединяем тикеры США (S&P 500 + NASDAQ 100, убираем дубликаты)
+    us_tickers = list(set(sp500 + nasdaq100))
+    eu_tickers = stoxx600
+    
+    print(f"\n🇺🇸 Всего уникальных тикеров США: {len(us_tickers)}")
+    print(f"🇪🇺 Всего тикеров Европы: {len(eu_tickers)}")
+    
+    all_results = []
+    
+    # --- Анализ США с задержкой ---
     print("\n🇺🇸 Анализ компаний США...")
-    # Объединяем списки и убираем дубликаты
-    all_us_tickers = list(set(us_tickers + nasdaq_tickers))
-    print(f"Анализирую {len(all_us_tickers)} уникальных акций США...")
+    for i, ticker in enumerate(us_tickers):
+        if i % 50 == 0:
+            print(f"  Обработано {i} из {len(us_tickers)}...")
+        m = get_stock_metrics(ticker, 'US')
+        if m:
+            all_results.append(m)
+        time.sleep(0.3)  # задержка 300 мс между запросами
     
-    # --- АНАЛИЗ АКЦИЙ ЕВРОПЫ (из STOXX 600) ---
+    # --- Анализ Европы с задержкой ---
     print("\n🇪🇺 Анализ компаний Европы...")
-    print(f"Анализирую {len(eu_tickers)} акций Европы...")
+    for i, ticker in enumerate(eu_tickers):
+        if i % 50 == 0:
+            print(f"  Обработано {i} из {len(eu_tickers)}...")
+        m = get_stock_metrics(ticker, 'EU')
+        if m:
+            all_results.append(m)
+        time.sleep(0.3)
     
-    
-    # Сортировка по total score
+    # Сортировка
     all_results.sort(key=lambda x: x['total'], reverse=True)
     
     # Формирование отчёта
@@ -190,21 +200,26 @@ def run_analysis():
     report_lines.append(f"📈 ОТЧЁТ ПО АКЦИЯМ | {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     report_lines.append("=" * 60)
     
-    report_lines.append("\n🏆 ТОП КАНДИДАТОВ ДЛЯ ДАЛЬНЕЙШЕГО ИЗУЧЕНИЯ:\n")
-    
-    for i, r in enumerate(all_results[:10], 1):
-        report_lines.append(f"{i}. {r['ticker']} ({r['region']}) | Total: {r['total']:.1f}")
-        if r.get('peg'):
-            if r.get('pe') and r.get('roe'):
-                report_lines.append(f"   PEG: {r['peg']:.2f} | P/E: {r['pe']:.1f} | ROE: {r['roe']*100:.1f}%")
-            else:
-                report_lines.append(f"   PEG: {r['peg']:.2f}")
-        if r.get('revenue_growth'):
-            report_lines.append(f"   Рост выручки: {r['revenue_growth']*100:.1f}% годовых")
-        report_lines.append("")
-    
-    if all_results and all_results[0].get('peg') and all_results[0]['peg'] < 0.7:
-        report_lines.append("🔔 СИГНАЛ: Найдены компании с PEG < 0.7 – потенциальная недооценка!")
+    if not all_results:
+        report_lines.append("\n⚠️ Не найдено компаний, соответствующих критериям.")
+        report_lines.append("Попробуйте ослабить фильтры (PEG, P/E, ROE).")
+    else:
+        report_lines.append("\n🏆 ТОП КАНДИДАТОВ ДЛЯ ДАЛЬНЕЙШЕГО ИЗУЧЕНИЯ:\n")
+        for i, r in enumerate(all_results[:10], 1):
+            report_lines.append(f"{i}. {r['ticker']} ({r['region']}) | Total: {r['total']:.1f}")
+            if r.get('peg'):
+                if r.get('pe') and r.get('roe'):
+                    report_lines.append(f"   PEG: {r['peg']:.2f} | P/E: {r['pe']:.1f} | ROE: {r['roe']*100:.1f}%")
+                else:
+                    report_lines.append(f"   PEG: {r['peg']:.2f}")
+            if r.get('revenue_growth'):
+                report_lines.append(f"   Рост выручки: {r['revenue_growth']*100:.1f}% годовых")
+            report_lines.append("")
+        
+        # Дополнительная статистика
+        avg_peg = np.mean([r['peg'] for r in all_results if r.get('peg')])
+        report_lines.append(f"📊 Всего проанализировано: {len(all_results)} компаний")
+        report_lines.append(f"Средний PEG среди найденных: {avg_peg:.2f}")
     
     report_lines.append("\n" + "=" * 60)
     report_lines.append("⚠️ Дисклеймер: Не индивидуальная инвестиционная рекомендация.")
@@ -219,5 +234,6 @@ if __name__ == "__main__":
     print(report)
     send_to_telegram(report)
     
+    # Сохраняем отчёт в файл (для артефактов GitHub)
     with open(f"stock_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt", "w", encoding="utf-8") as f:
         f.write(report)
