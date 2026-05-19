@@ -7,6 +7,7 @@ import numpy as np
 from datetime import datetime
 import os
 import requests
+from bs4 import BeautifulSoup
 import time
 import warnings
 warnings.filterwarnings('ignore')
