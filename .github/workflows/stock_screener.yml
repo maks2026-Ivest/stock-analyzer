@@ -2,7 +2,7 @@ name: Ежедневный анализ акций
 
 on:
   schedule:
-    - cron: '30 19 * * *'
+        - cron: '30 20 * * 3,5'
   workflow_dispatch:
 
 jobs:
