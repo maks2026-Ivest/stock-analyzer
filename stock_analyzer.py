@@ -9,36 +9,106 @@ import os
 import requests
 import time
 import warnings
+from bs4 import BeautifulSoup
 
 warnings.filterwarnings('ignore')
 
 # -------------------------------------------------------------------
-# 1. ЗАГРУЗКА СПИСКОВ ИЗ CSV (СОЗДАЮТСЯ fetch_tickers.py)
+# 1. ЗАГРУЗКА СПИСКОВ США (ПРЯМО ИЗ ИНТЕРНЕТА)
 # -------------------------------------------------------------------
-def load_tickers(filename):
+def get_us_tickers():
+    """Объединяет S&P 500 и NASDAQ 100, возвращает уникальные тикеры"""
+    sp500_url = 'https://raw.githubusercontent.com/datasets/s-and-p-500-companies/main/data/constituents.csv'
+    nasdaq100_url = 'https://raw.githubusercontent.com/Ate329/top-us-stock-tickers/main/tickers/top_100.csv'
+    tickers = []
     try:
-        df = pd.read_csv(filename)
+        sp500 = pd.read_csv(sp500_url)
+        tickers += sp500['Symbol'].str.replace('.', '-').tolist()
+    except Exception as e:
+        print(f"Ошибка загрузки S&P 500: {e}")
+    try:
+        nasdaq = pd.read_csv(nasdaq100_url)
+        tickers += nasdaq['Symbol'].str.replace('.', '-').tolist()
+    except Exception as e:
+        print(f"Ошибка загрузки NASDAQ 100: {e}")
+    if not tickers:
+        # Резервный список, если оба источника недоступны
+        print("Использую резервный список США")
+        return ['AAPL', 'MSFT', 'NVDA', 'GOOGL', 'META', 'ADBE', 'PYPL', 'INTC', 'AMD', 'IBM']
+    return list(set(tickers))
+
+# -------------------------------------------------------------------
+# 2. ЗАГРУЗКА СПИСКА ЕВРОПЫ (ПАРСИНГ + ЛОКАЛЬНЫЙ CSV + РЕЗЕРВ)
+# -------------------------------------------------------------------
+def get_stoxx600_from_investing():
+    """Парсит страницу investing.com и возвращает список тикеров"""
+    url = 'https://www.investing.com/indices/stoxx-600-components'
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept-Language': 'en-US,en;q=0.9'
+    }
+    try:
+        response = requests.get(url, headers=headers, timeout=15)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+        table = soup.find('table', {'class': 'common-table'})
+        if not table:
+            return None
+        tickers = []
+        for row in table.find_all('tr')[1:]:
+            cells = row.find_all('td')
+            if len(cells) > 1:
+                ticker = cells[1].get_text(strip=True)
+                if ticker:
+                    tickers.append(ticker)
+        if len(tickers) > 100:
+            return tickers
+    except Exception as e:
+        print(f"Парсинг investing.com не удался: {e}")
+    return None
+
+def load_local_eu_tickers():
+    """Пытается загрузить stoxx600_full.csv из репозитория"""
+    try:
+        df = pd.read_csv('stoxx600_full.csv')
         if 'ticker' in df.columns:
             return df['ticker'].tolist()
         else:
             return df.iloc[:, 0].tolist()
-    except Exception as e:
-        print(f"Ошибка загрузки {filename}: {e}")
-        return []
+    except:
+        return None
+
+def get_eu_tickers():
+    """Загружает европейские тикеры: парсинг > локальный CSV > резерв"""
+    print("Загружаю европейские тикеры...")
+    tickers = get_stoxx600_from_investing()
+    if tickers:
+        print(f"  Загружено {len(tickers)} тикеров с investing.com")
+        return tickers
+    tickers = load_local_eu_tickers()
+    if tickers:
+        print(f"  Загружено {len(tickers)} тикеров из локального CSV")
+        return tickers
+    # Резервный список крупнейших европейских компаний
+    fallback = ['ASML.AS', 'SAP.DE', 'IFX.DE', 'OR.PA', 'TTE.PA', 'SAN.PA', 
+                'NOVO-B.CO', 'MC.PA', 'NESN.SW', 'ULVR.L', 'BN.PA', 'AIR.PA',
+                'SU.PA', 'ELI.PA', 'INGA.AS', 'UBSG.SW', 'ABBN.SW', 'ROG.SW',
+                'RWE.DE', 'LIN.DE']
+    print(f"  Использую резервный список ({len(fallback)} тикеров)")
+    return fallback
 
 # -------------------------------------------------------------------
-# 2. ПОЛУЧЕНИЕ МЕТРИК С ДРОБНЫМИ БАЛЛАМИ (0..20)
+# 3. ПОЛУЧЕНИЕ МЕТРИК (VALUE SCORE 0..20)
 # -------------------------------------------------------------------
 def get_metrics(ticker, region):
     try:
         stock = yf.Ticker(ticker)
         info = stock.info
-        
         pe = info.get('trailingPE')
         peg = info.get('pegRatio')
         roe = info.get('returnOnEquity')
         fcf_yield = info.get('freeCashflowYield')
-        debt_to_equity = info.get('debtToEquity')
+        debt = info.get('debtToEquity')
         
         # Рост выручки (3 года CAGR)
         revenue_growth = None
@@ -55,8 +125,7 @@ def get_metrics(ticker, region):
             pass
         
         score = 0.0
-        
-        # PEG (0–5)
+        # PEG
         if peg is not None:
             if peg < 0.7:
                 score += 5.0
@@ -66,18 +135,16 @@ def get_metrics(ticker, region):
                 score += 2.0
             elif peg < 1.6:
                 score += 1.0
-        
-        # P/E (0–4) – чем ниже, тем лучше
+        # P/E
         if pe is not None:
-            target_pe = 15 if region == 'US' else 12
-            if pe < target_pe:
-                score += max(0, 4.0 * (1 - pe / target_pe))
-            elif pe < target_pe * 1.3:
+            target = 15 if region == 'US' else 12
+            if pe < target:
+                score += max(0, 4.0 * (1 - pe / target))
+            elif pe < target * 1.3:
                 score += 1.0
-            elif pe < target_pe * 1.6:
+            elif pe < target * 1.6:
                 score += 0.5
-        
-        # ROE (0–4)
+        # ROE
         if roe is not None:
             if region == 'US':
                 if roe > 0.25:
@@ -88,7 +155,7 @@ def get_metrics(ticker, region):
                     score += 2.0
                 elif roe > 0.10:
                     score += 1.0
-            else:  # EU
+            else:
                 if roe > 0.20:
                     score += 4.0
                 elif roe > 0.15:
@@ -97,8 +164,7 @@ def get_metrics(ticker, region):
                     score += 2.0
                 elif roe > 0.08:
                     score += 1.0
-        
-        # Рост выручки (0–4)
+        # Рост выручки
         if revenue_growth is not None:
             if revenue_growth > 0.20:
                 score += 4.0
@@ -108,26 +174,22 @@ def get_metrics(ticker, region):
                 score += 2.0
             elif revenue_growth > 0.05:
                 score += 1.0
-        
-        # FCF Yield (0–2)
+        # FCF Yield
         if fcf_yield is not None:
             if fcf_yield > 0.08:
                 score += 2.0
             elif fcf_yield > 0.05:
                 score += 1.0
-        
-        # Штраф за долг (0..-2)
-        if debt_to_equity is not None:
-            if debt_to_equity > 1.5:
+        # Штраф за долг
+        if debt is not None:
+            if debt > 1.5:
                 score -= 2.0
-            elif debt_to_equity > 1.0:
+            elif debt > 1.0:
                 score -= 1.0
-            elif debt_to_equity > 0.7:
+            elif debt > 0.7:
                 score -= 0.5
-        
         if score == 0:
             return None
-        
         return {
             'ticker': ticker,
             'region': region,
@@ -136,14 +198,14 @@ def get_metrics(ticker, region):
             'roe': roe,
             'revenue_growth': revenue_growth,
             'fcf_yield': fcf_yield,
-            'debt_to_equity': debt_to_equity,
+            'debt': debt,
             'total': round(score, 2)
         }
     except Exception:
         return None
 
 # -------------------------------------------------------------------
-# 3. ОТПРАВКА В TELEGRAM
+# 4. ОТПРАВКА В TELEGRAM
 # -------------------------------------------------------------------
 def send_telegram(text):
     token = os.environ.get('TELEGRAM_TOKEN')
@@ -155,30 +217,30 @@ def send_telegram(text):
     if len(text) > 4096:
         text = text[:4093] + "..."
     try:
-        requests.post(url, json={'chat_id': chat_id, 'text': text}, timeout=10)
-        print("✅ Отправлено")
+        r = requests.post(url, json={'chat_id': chat_id, 'text': text}, timeout=10)
+        if r.status_code == 200:
+            print("✅ Отправлено")
+        else:
+            print(f"Ошибка {r.status_code}")
     except Exception as e:
         print(f"Ошибка: {e}")
 
 # -------------------------------------------------------------------
-# 4. ОСНОВНАЯ ФУНКЦИЯ
+# 5. ОСНОВНАЯ ФУНКЦИЯ
 # -------------------------------------------------------------------
 def run():
     print(f"📊 Старт {datetime.now()}\n")
     
-    us = load_tickers('us_tickers.csv')
-    eu = load_tickers('stoxx600_full.csv')
-    
-    if not us and not eu:
-        print("❌ Нет CSV-файлов. Запустите fetch_tickers.py")
-        return
+    # Загрузка списков
+    us = get_us_tickers()
+    eu = get_eu_tickers()
     
     print(f"🇺🇸 США: {len(us)} тикеров")
     print(f"🇪🇺 Европа: {len(eu)} тикеров")
     
     all_res = []
     
-    # США
+    # Сканирование США
     print("\n🇺🇸 Сканирование...")
     for i, t in enumerate(us):
         if i % 50 == 0:
@@ -188,7 +250,7 @@ def run():
             all_res.append(m)
         time.sleep(0.25)
     
-    # Европа
+    # Сканирование Европы
     print("\n🇪🇺 Сканирование...")
     for i, t in enumerate(eu):
         if i % 50 == 0:
@@ -200,7 +262,6 @@ def run():
     
     all_res.sort(key=lambda x: x['total'], reverse=True)
     top20 = all_res[:20]
-    
     total_analyzed = len(all_res)
     avg_peg = np.mean([r['peg'] for r in all_res if r.get('peg')]) if total_analyzed else 0
     
@@ -208,7 +269,6 @@ def run():
     lines.append("="*60)
     lines.append(f"📈 ТОП-20 | {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     lines.append("="*60)
-    
     for i, r in enumerate(top20, 1):
         lines.append(f"{i}. {r['ticker']} ({r['region']}) | Score: {r['total']:.2f}")
         detail = []
@@ -222,7 +282,6 @@ def run():
         if r.get('fcf_yield'):
             lines.append(f"   FCF Yield: {r['fcf_yield']*100:.1f}%")
         lines.append("")
-    
     lines.append(f"📊 Всего проанализировано: {total_analyzed}")
     lines.append(f"📊 Средний PEG: {avg_peg:.2f}")
     lines.append("="*60)
