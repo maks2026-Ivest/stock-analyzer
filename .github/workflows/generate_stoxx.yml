@@ -1,0 +1,24 @@
+name: Generate STOXX 600 CSV
+
+on:
+  workflow_dispatch:  # запуск вручную
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Установка pandas
+        run: pip install pandas
+      - name: Запуск create_stoxx_csv.py
+        run: python create_stoxx_csv.py
+      - name: Коммит и пуш CSV-файла
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add stoxx600_full.csv
+          git commit -m "Автоматически сгенерирован stoxx600_full.csv" || echo "Нет изменений"
+          git push
