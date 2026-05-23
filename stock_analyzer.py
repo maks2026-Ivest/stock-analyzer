@@ -235,35 +235,50 @@ def run():
     us = get_us_tickers()
     eu = get_eu_tickers()
     
-    print(f"🇺🇸 США: {len(us)} тикеров")
-    print(f"🇪🇺 Европа: {len(eu)} тикеров")
+    print(f"🇺🇸 США: загружено {len(us)} тикеров")
+    print(f"🇪🇺 Европа: загружено {len(eu)} тикеров")
     
     all_res = []
+    us_processed = 0
+    eu_processed = 0
+    
+    # НОВОЕ: списки для непрошедших компаний
+    failed_us = []
+    failed_eu = []
     
     # Сканирование США
-    print("\n🇺🇸 Сканирование...")
+    print("\n🇺🇸 Сканирование США...")
     for i, t in enumerate(us):
         if i % 50 == 0:
             print(f"  {i}/{len(us)}")
         m = get_metrics(t, 'US')
         if m:
             all_res.append(m)
+            us_processed += 1
+        else:
+            failed_us.append(t)   # НОВОЕ
         time.sleep(0.25)
     
     # Сканирование Европы
-    print("\n🇪🇺 Сканирование...")
+    print("\n🇪🇺 Сканирование Европы...")
     for i, t in enumerate(eu):
         if i % 50 == 0:
             print(f"  {i}/{len(eu)}")
         m = get_metrics(t, 'EU')
         if m:
             all_res.append(m)
+            eu_processed += 1
+        else:
+            failed_eu.append(t)   # НОВОЕ
         time.sleep(0.25)
     
     all_res.sort(key=lambda x: x['total'], reverse=True)
     top20 = all_res[:20]
     total_analyzed = len(all_res)
-    avg_peg = np.mean([r['peg'] for r in all_res if r.get('peg')]) if total_analyzed else 0
+    
+    # Средний PEG
+    peg_values = [r['peg'] for r in all_res if r.get('peg') is not None]
+    avg_peg = np.mean(peg_values) if peg_values else 0
     
     lines = []
     lines.append("="*60)
@@ -282,14 +297,44 @@ def run():
         if r.get('fcf_yield'):
             lines.append(f"   FCF Yield: {r['fcf_yield']*100:.1f}%")
         lines.append("")
-    lines.append(f"📊 Всего проанализировано: {total_analyzed}")
-    lines.append(f"📊 Средний PEG: {avg_peg:.2f}")
+    
+    # Статистика обработки
+    lines.append(f"📊 **Статистика обработки:**")
+    lines.append(f"   🇺🇸 США: загружено {len(us)}, проанализировано {us_processed}, не прошло {len(failed_us)}")
+    lines.append(f"   🇪🇺 Европа: загружено {len(eu)}, проанализировано {eu_processed}, не прошло {len(failed_eu)}")
+    lines.append(f"   📋 Всего проанализировано (score > 0): {total_analyzed}")
+    if peg_values:
+        lines.append(f"   📈 Средний PEG среди найденных: {avg_peg:.2f}")
+    
+    # НОВОЕ: показываем первые 10 непрошедших тикеров (если они есть)
+    if failed_us:
+        lines.append(f"\n⚠️ Примеры тикеров США, не прошедших фильтр (первые 10):")
+        lines.append(f"   {', '.join(failed_us[:10])}")
+    if failed_eu:
+        lines.append(f"\n⚠️ Примеры тикеров Европы, не прошедших фильтр (первые 10):")
+        lines.append(f"   {', '.join(failed_eu[:10])}")
+    
     lines.append("="*60)
     lines.append("⚠️ Не ИИР. Изучите бизнес самостоятельно.")
+    
+    # Дополнительно: сохраняем полный список непрошедших в CSV (артефакт)
+    # Это позволит скачать файл после выполнения workflow
+    if failed_us or failed_eu:
+        df_failed = pd.DataFrame({
+            'ticker': failed_us + failed_eu,
+            'region': ['US']*len(failed_us) + ['EU']*len(failed_eu)
+        })
+        df_failed.to_csv('failed_tickers.csv', index=False)
+        print(f"💾 Список непрошедших компаний сохранён в failed_tickers.csv")
     
     report = "\n".join(lines)
     print(report)
     send_telegram(report)
+    
+    # Сохраняем отчёт в файл для артефакта (если нужно)
+    with open(f"stock_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt", "w", encoding="utf-8") as f:
+        f.write(report)
+    
     print("\n✅ Готово")
 
 if __name__ == "__main__":
