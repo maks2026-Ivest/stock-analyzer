@@ -14,59 +14,33 @@ from bs4 import BeautifulSoup
 warnings.filterwarnings('ignore')
 
 # -------------------------------------------------------------------
-# 1. ЗАГРУЗКА СПИСКОВ США (ПРЯМО ИЗ ИНТЕРНЕТА)
+# 1. ЗАГРУЗКА СПИСКОВ США (РАЗДЕЛЬНО ДЛЯ S&P 500 И NASDAQ 100)
 # -------------------------------------------------------------------
-def get_us_tickers():
-    """Объединяет S&P 500 и NASDAQ 100, возвращает уникальные тикеры"""
-    sp500_url = 'https://raw.githubusercontent.com/datasets/s-and-p-500-companies/main/data/constituents.csv'
-    nasdaq100_url = 'https://raw.githubusercontent.com/Ate329/top-us-stock-tickers/main/tickers/top_100.csv'
-    tickers = []
+def load_sp500_tickers():
+    """Загружает список S&P 500"""
+    url = 'https://raw.githubusercontent.com/datasets/s-and-p-500-companies/main/data/constituents.csv'
     try:
-        sp500 = pd.read_csv(sp500_url)
-        tickers += sp500['Symbol'].str.replace('.', '-').tolist()
+        df = pd.read_csv(url)
+        tickers = df['Symbol'].str.replace('.', '-').tolist()
+        return tickers
     except Exception as e:
         print(f"Ошибка загрузки S&P 500: {e}")
+        return []
+
+def load_nasdaq100_tickers():
+    """Загружает список NASDAQ 100"""
+    url = 'https://raw.githubusercontent.com/Ate329/top-us-stock-tickers/main/tickers/top_100.csv'
     try:
-        nasdaq = pd.read_csv(nasdaq100_url)
-        tickers += nasdaq['Symbol'].str.replace('.', '-').tolist()
+        df = pd.read_csv(url)
+        tickers = df['Symbol'].str.replace('.', '-').tolist()
+        return tickers
     except Exception as e:
         print(f"Ошибка загрузки NASDAQ 100: {e}")
-    if not tickers:
-        # Резервный список, если оба источника недоступны
-        print("Использую резервный список США")
-        return ['AAPL', 'MSFT', 'NVDA', 'GOOGL', 'META', 'ADBE', 'PYPL', 'INTC', 'AMD', 'IBM']
-    return list(set(tickers))
+        return []
 
 # -------------------------------------------------------------------
-# 2. ЗАГРУЗКА СПИСКА ЕВРОПЫ (ПАРСИНГ + ЛОКАЛЬНЫЙ CSV + РЕЗЕРВ)
+# 2. ЗАГРУЗКА СПИСКА ЕВРОПЫ (ЛОКАЛЬНЫЙ CSV + РЕЗЕРВ)
 # -------------------------------------------------------------------
-def get_stoxx600_from_investing():
-    """Парсит страницу investing.com и возвращает список тикеров"""
-    url = 'https://www.investing.com/indices/stoxx-600-components'
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept-Language': 'en-US,en;q=0.9'
-    }
-    try:
-        response = requests.get(url, headers=headers, timeout=15)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, 'html.parser')
-        table = soup.find('table', {'class': 'common-table'})
-        if not table:
-            return None
-        tickers = []
-        for row in table.find_all('tr')[1:]:
-            cells = row.find_all('td')
-            if len(cells) > 1:
-                ticker = cells[1].get_text(strip=True)
-                if ticker:
-                    tickers.append(ticker)
-        if len(tickers) > 100:
-            return tickers
-    except Exception as e:
-        print(f"Парсинг investing.com не удался: {e}")
-    return None
-
 def load_local_eu_tickers():
     """Пытается загрузить stoxx600_full.csv из репозитория"""
     try:
@@ -79,12 +53,8 @@ def load_local_eu_tickers():
         return None
 
 def get_eu_tickers():
-    """Загружает европейские тикеры: парсинг > локальный CSV > резерв"""
+    """Загружает европейские тикеры: локальный CSV > резерв"""
     print("Загружаю европейские тикеры...")
-    tickers = get_stoxx600_from_investing()
-    if tickers:
-        print(f"  Загружено {len(tickers)} тикеров с investing.com")
-        return tickers
     tickers = load_local_eu_tickers()
     if tickers:
         print(f"  Загружено {len(tickers)} тикеров из локального CSV")
@@ -226,60 +196,80 @@ def send_telegram(text):
         print(f"Ошибка: {e}")
 
 # -------------------------------------------------------------------
-# 5. ОСНОВНАЯ ФУНКЦИЯ
+# 5. ОСНОВНАЯ ФУНКЦИЯ (С РАЗДЕЛЬНОЙ СТАТИСТИКОЙ ПО ИНДЕКСАМ США)
 # -------------------------------------------------------------------
 def run():
     print(f"📊 Старт {datetime.now()}\n")
     
-    # Загрузка списков
-    us = get_us_tickers()
-    eu = get_eu_tickers()
+    # --- Загрузка списков США раздельно ---
+    sp500_tickers = load_sp500_tickers()
+    nasdaq100_tickers = load_nasdaq100_tickers()
     
-    print(f"🇺🇸 США: загружено {len(us)} тикеров")
-    print(f"🇪🇺 Европа: загружено {len(eu)} тикеров")
+    # Объединение для сканирования (уникальные)
+    us_tickers = list(set(sp500_tickers + nasdaq100_tickers))
+    
+    print(f"🇺🇸 S&P 500: загружено {len(sp500_tickers)} тикеров")
+    print(f"🇺🇸 NASDAQ 100: загружено {len(nasdaq100_tickers)} тикеров")
+    print(f"🇺🇸 Всего уникальных тикеров США: {len(us_tickers)}")
+    
+    # --- Загрузка европейских тикеров ---
+    eu_tickers = get_eu_tickers()
+    print(f"🇪🇺 Европа: загружено {len(eu_tickers)} тикеров")
     
     all_res = []
-    us_processed = 0
-    eu_processed = 0
     
-    # НОВОЕ: списки для непрошедших компаний
-    failed_us = []
-    failed_eu = []
+    # Счётчики для США по индексам
+    sp500_processed = 0
+    nasdaq100_processed = 0
+    sp500_failed = []
+    nasdaq100_failed = []
     
-    # Сканирование США
+    # Сканирование США (уникальные тикеры)
     print("\n🇺🇸 Сканирование США...")
-    for i, t in enumerate(us):
+    for i, t in enumerate(us_tickers):
         if i % 50 == 0:
-            print(f"  {i}/{len(us)}")
+            print(f"  {i}/{len(us_tickers)}")
         m = get_metrics(t, 'US')
         if m:
             all_res.append(m)
-            us_processed += 1
+        # Определяем принадлежность к индексам
+        in_sp500 = t in sp500_tickers
+        in_nasdaq = t in nasdaq100_tickers
+        if m:
+            if in_sp500:
+                sp500_processed += 1
+            if in_nasdaq:
+                nasdaq100_processed += 1
         else:
-            failed_us.append(t)   # НОВОЕ
+            if in_sp500:
+                sp500_failed.append(t)
+            if in_nasdaq:
+                nasdaq100_failed.append(t)
         time.sleep(0.25)
     
     # Сканирование Европы
+    eu_processed = 0
+    eu_failed = []
     print("\n🇪🇺 Сканирование Европы...")
-    for i, t in enumerate(eu):
+    for i, t in enumerate(eu_tickers):
         if i % 50 == 0:
-            print(f"  {i}/{len(eu)}")
+            print(f"  {i}/{len(eu_tickers)}")
         m = get_metrics(t, 'EU')
         if m:
             all_res.append(m)
             eu_processed += 1
         else:
-            failed_eu.append(t)   # НОВОЕ
+            eu_failed.append(t)
         time.sleep(0.25)
     
+    # Сортировка и топ-20
     all_res.sort(key=lambda x: x['total'], reverse=True)
     top20 = all_res[:20]
     total_analyzed = len(all_res)
-    
-    # Средний PEG
     peg_values = [r['peg'] for r in all_res if r.get('peg') is not None]
     avg_peg = np.mean(peg_values) if peg_values else 0
     
+    # Формирование отчёта
     lines = []
     lines.append("="*60)
     lines.append(f"📈 ТОП-20 | {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -300,30 +290,38 @@ def run():
     
     # Статистика обработки
     lines.append(f"📊 **Статистика обработки:**")
-    lines.append(f"   🇺🇸 США: загружено {len(us)}, проанализировано {us_processed}, не прошло {len(failed_us)}")
-    lines.append(f"   🇪🇺 Европа: загружено {len(eu)}, проанализировано {eu_processed}, не прошло {len(failed_eu)}")
+    lines.append(f"   🇺🇸 S&P 500: загружено {len(sp500_tickers)}, проанализировано {sp500_processed}, не прошло {len(sp500_failed)}")
+    lines.append(f"   🇺🇸 NASDAQ 100: загружено {len(nasdaq100_tickers)}, проанализировано {nasdaq100_processed}, не прошло {len(nasdaq100_failed)}")
+    lines.append(f"   🇺🇸 Всего уникальных тикеров США: {len(us_tickers)}")
+    lines.append(f"   🇪🇺 Европа: загружено {len(eu_tickers)}, проанализировано {eu_processed}, не прошло {len(eu_failed)}")
     lines.append(f"   📋 Всего проанализировано (score > 0): {total_analyzed}")
     if peg_values:
         lines.append(f"   📈 Средний PEG среди найденных: {avg_peg:.2f}")
     
-    # НОВОЕ: показываем первые 10 непрошедших тикеров (если они есть)
-    if failed_us:
-        lines.append(f"\n⚠️ Примеры тикеров США, не прошедших фильтр (первые 10):")
-        lines.append(f"   {', '.join(failed_us[:10])}")
-    if failed_eu:
+    # Первые 10 непрошедших (для примера)
+    if sp500_failed:
+        lines.append(f"\n⚠️ Примеры тикеров S&P 500, не прошедших фильтр (первые 10):")
+        lines.append(f"   {', '.join(sp500_failed[:10])}")
+    if nasdaq100_failed:
+        lines.append(f"\n⚠️ Примеры тикеров NASDAQ 100, не прошедших фильтр (первые 10):")
+        lines.append(f"   {', '.join(nasdaq100_failed[:10])}")
+    if eu_failed:
         lines.append(f"\n⚠️ Примеры тикеров Европы, не прошедших фильтр (первые 10):")
-        lines.append(f"   {', '.join(failed_eu[:10])}")
+        lines.append(f"   {', '.join(eu_failed[:10])}")
     
     lines.append("="*60)
     lines.append("⚠️ Не ИИР. Изучите бизнес самостоятельно.")
     
-    # Дополнительно: сохраняем полный список непрошедших в CSV (артефакт)
-    # Это позволит скачать файл после выполнения workflow
-    if failed_us or failed_eu:
-        df_failed = pd.DataFrame({
-            'ticker': failed_us + failed_eu,
-            'region': ['US']*len(failed_us) + ['EU']*len(failed_eu)
-        })
+    # Сохраняем непрошедшие в CSV (артефакт)
+    if sp500_failed or nasdaq100_failed or eu_failed:
+        failed_data = []
+        for t in sp500_failed:
+            failed_data.append({'ticker': t, 'region': 'S&P 500'})
+        for t in nasdaq100_failed:
+            failed_data.append({'ticker': t, 'region': 'NASDAQ 100'})
+        for t in eu_failed:
+            failed_data.append({'ticker': t, 'region': 'EU'})
+        df_failed = pd.DataFrame(failed_data)
         df_failed.to_csv('failed_tickers.csv', index=False)
         print(f"💾 Список непрошедших компаний сохранён в failed_tickers.csv")
     
@@ -331,7 +329,6 @@ def run():
     print(report)
     send_telegram(report)
     
-    # Сохраняем отчёт в файл для артефакта (если нужно)
     with open(f"stock_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt", "w", encoding="utf-8") as f:
         f.write(report)
     
