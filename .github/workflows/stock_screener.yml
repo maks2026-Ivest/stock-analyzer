@@ -1,36 +1,22 @@
-name: Ежедневный анализ акций
+name: Еженедельный скрининг акций
 
 on:
   schedule:
-        - cron: '30 20 * * 3,5'
+    - cron: '30 19 * * 3,5'
   workflow_dispatch:
 
 jobs:
-  run-analysis:
+  scan:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Получить код
-        uses: actions/checkout@v4
-      
-      - name: Установить Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-      
-      - name: Установить зависимости
-        run: |
-          pip install --upgrade pip
-          pip install yfinance pandas numpy requests
-      
-      - name: Запустить анализ
+      - name: Установка зависимостей
+        run: pip install yfinance pandas numpy requests beautifulsoup4
+      - name: Запуск анализа
         run: python stock_analyzer.py
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          
-     - name: Сохранить отчёт
-        uses: actions/upload-artifact@v4
-        with:
-          name: stock-report
-          path: stock_report_*.txt
