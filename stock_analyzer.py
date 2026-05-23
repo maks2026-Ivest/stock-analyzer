@@ -28,14 +28,29 @@ def load_sp500_tickers():
         return []
 
 def load_nasdaq100_tickers():
-    """Загружает список NASDAQ 100"""
-    url = 'https://raw.githubusercontent.com/Ate329/top-us-stock-tickers/main/tickers/top_100.csv'
+    """Загружает список NASDAQ 100 через ETF QQQ (надёжный способ)"""
     try:
-        df = pd.read_csv(url)
-        tickers = df['Symbol'].str.replace('.', '-').tolist()
-        return tickers
+        # ETF QQQ отслеживает Nasdaq 100
+        etf = yf.Ticker("QQQ")
+        # Получаем холдинги (holdings) - возвращает DataFrame
+        holdings = etf.holdings
+        if holdings is not None and 'Symbol' in holdings.columns:
+            tickers = holdings['Symbol'].tolist()
+            # Очищаем от возможных дублей и пустых
+            tickers = [t for t in tickers if isinstance(t, str) and t]
+            return tickers
+        else:
+            # fallback: использовать известный список из репозитория (если холдинги не загрузились)
+            fallback_url = 'https://raw.githubusercontent.com/shirosaidev/stocks-ticker-symbols/main/data/nasdaq_100.txt'
+            import requests
+            resp = requests.get(fallback_url)
+            if resp.status_code == 200:
+                tickers = resp.text.strip().split('\n')
+                return [t.strip() for t in tickers]
+            else:
+                return []
     except Exception as e:
-        print(f"Ошибка загрузки NASDAQ 100: {e}")
+        print(f"Ошибка загрузки NASDAQ 100 через QQQ: {e}")
         return []
 
 # -------------------------------------------------------------------
