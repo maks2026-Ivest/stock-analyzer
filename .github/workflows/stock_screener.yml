@@ -8,8 +8,14 @@ on:
 jobs:
   scan:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read          # Чтение кода репозитория (для checkout)
+      # Если вы не пишете в репозиторий, write не нужен
     steps:
       - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0       # Полная история (если нужно)
       - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
