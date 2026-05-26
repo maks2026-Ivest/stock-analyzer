@@ -28,27 +28,26 @@ def load_sp500_tickers():
         return []
 
 def load_nasdaq100_tickers():
-    """Загружает список NASDAQ 100 из надёжного CSV-репозитория"""
-    # Приоритетный источник (прямой CSV с колонкой Symbol)
+    """Загружает список NASDAQ 100: онлайн-источники > локальный CSV > резервный список"""
+    
+    # 1. Онлайн-источник (yfiua)
     url = 'https://yfiua.github.io/index-constituents/constituents-nasdaq100.csv'
     try:
-        import pandas as pd
         df = pd.read_csv(url)
         if 'Symbol' in df.columns:
             tickers = df['Symbol'].tolist()
-            # Очищаем и убираем дубликаты
-            tickers = [t.strip() for t in tickers if isinstance(t, str) and t.strip()]
-            print(f"✅ NASDAQ 100: загружено {len(tickers)} тикеров через CSV")
-            return tickers
+        else:
+            tickers = df.iloc[:, 0].tolist()
+        tickers = [t.strip() for t in tickers if isinstance(t, str) and t.strip()]
+        print(f"✅ NASDAQ 100: загружено {len(tickers)} тикеров из онлайн-источника (yfiua)")
+        return tickers
     except Exception as e:
-        print(f"Ошибка загрузки из основного источника {url}: {e}")
+        print(f"Ошибка загрузки из {url}: {e}")
     
-    # Резервный источник: текстовый файл (построчный список)
+    # 2. Резервный онлайн-источник (johnbumgardner)
     fallback_url = 'https://raw.githubusercontent.com/johnbumgardner/nasdaq100/master/nasdaq100.csv'
     try:
-        import pandas as pd
         df = pd.read_csv(fallback_url)
-        # В этом файле колонка называется 'Symbol'
         if 'Symbol' in df.columns:
             tickers = df['Symbol'].tolist()
         elif 'Ticker' in df.columns:
@@ -56,13 +55,29 @@ def load_nasdaq100_tickers():
         else:
             tickers = df.iloc[:, 0].tolist()
         tickers = [t.strip() for t in tickers if isinstance(t, str) and t.strip()]
-        print(f"✅ NASDAQ 100: загружено {len(tickers)} тикеров через резервный CSV")
+        print(f"✅ NASDAQ 100: загружено {len(tickers)} тикеров из онлайн-источника (johnbumgardner)")
         return tickers
     except Exception as e:
-        print(f"Ошибка загрузки из резервного источника {fallback_url}: {e}")
+        print(f"Ошибка загрузки из {fallback_url}: {e}")
     
-    # Последний резерв (ручной список)
-    fallback_list = ['AAPL', 'MSFT', 'NVDA', 'GOOGL', 'META', 'TSLA', 'AMZN', 'ADBE', 'NFLX', 'PYPL']
+    # 3. Локальный CSV-файл (как для Европы)
+    try:
+        df = pd.read_csv('nasdaq100.csv')
+        if 'ticker' in df.columns:
+            tickers = df['ticker'].tolist()
+        else:
+            tickers = df.iloc[:, 0].tolist()
+        tickers = [str(t).strip() for t in tickers if str(t).strip()]
+        if tickers:
+            print(f"✅ NASDAQ 100: загружено {len(tickers)} тикеров из локального CSV")
+            return tickers
+    except Exception as e:
+        print(f"Локальный файл nasdaq100.csv не загружен: {e}")
+    
+    # 4. Ручной резервный список
+    fallback_list = ['AAPL', 'MSFT', 'NVDA', 'GOOGL', 'META', 'AVGO', 'AMD', 'ASML', 'ORCL', 'CRM',
+    'AMZN', 'COST', 'WMT', 'HD', 'NKE', 'V', 'MA', 'JPM', 'BAC', 'LLY',
+    'UNH', 'JNJ', 'MRK', 'ABBV', 'TSLA', 'XOM', 'CVX', 'CAT', 'GE', 'NFLX']
     print(f"⚠️ Использую резервный список из {len(fallback_list)} тикеров")
     return fallback_list
 
