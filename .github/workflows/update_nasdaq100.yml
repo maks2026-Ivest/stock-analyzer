@@ -2,7 +2,7 @@ name: Update NASDAQ 100 List
 
 on:
   schedule:
-    - cron: '0 0 1 * *'   # 1-го числа каждого месяца
+    - cron: '0 0 1 * *'
   workflow_dispatch:
 
 jobs:
@@ -15,26 +15,12 @@ jobs:
           python-version: '3.10'
       - name: Install dependencies
         run: pip install pandas yfinance
-      - name: Generate nasdaq100.csv from QQQ holdings
-        run: |
-          python -c "
-import yfinance as yf
-import pandas as pd
-etf = yf.Ticker('QQQ')
-holdings = etf.holdings
-if holdings is not None and 'Symbol' in holdings.columns:
-    tickers = holdings['Symbol'].tolist()
-    pd.DataFrame({'ticker': tickers}).to_csv('nasdaq100.csv', index=False)
-    print(f'Updated {len(tickers)} tickers')
-else:
-    print('Failed to get holdings, fallback to static list')
-    fallback = ['AAPL','MSFT','NVDA','GOOGL','META','TSLA','AMZN','ADBE','NFLX','PYPL']
-    pd.DataFrame({'ticker': fallback}).to_csv('nasdaq100.csv', index=False)
-"
+      - name: Generate nasdaq100.csv
+        run: python update_nasdaq100.py
       - name: Commit and push
         run: |
           git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config.user.email "github-actions[bot]@users.noreply.github.com"
           git add nasdaq100.csv
           git diff --quiet && git diff --staged --quiet || git commit -m "Automatically update NASDAQ 100 list"
           git push
