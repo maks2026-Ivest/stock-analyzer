@@ -1,14 +1,12 @@
-name: Еженедельный скрининг акций
+name: Анализ акций
 
 on:
- schedule:
+  workflow_dispatch:   # это включает ручной запуск
+  schedule:
     - cron: '*/5 * * * *'
-  workflow_dispatch:
 
 jobs:
   scan:
-    runs-on: ubuntu-latest
-    steps:
       - uses: actions/checkout@v4   # без token
       - uses: actions/setup-python@v5
         with:
