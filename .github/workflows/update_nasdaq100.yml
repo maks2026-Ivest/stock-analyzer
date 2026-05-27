@@ -20,7 +20,7 @@ jobs:
       - name: Commit and push
         run: |
           git config user.name "github-actions[bot]"
-          git config.user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           git add nasdaq100.csv
           git diff --quiet && git diff --staged --quiet || git commit -m "Automatically update NASDAQ 100 list"
           git push
