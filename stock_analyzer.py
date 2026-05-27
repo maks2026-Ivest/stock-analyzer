@@ -349,13 +349,13 @@ def run():
     value_list.sort(key=lambda x: x[2], reverse=True)
     growth_list.sort(key=lambda x: x[2], reverse=True)
     
-    top_value = value_list[:20]
-    top_growth = growth_list[:20]
+    top_value = value_list[:15]
+    top_growth = growth_list[:15]
     
-    # --- Формируем первый отчёт: VALUE TOP 20 ---
+    # --- Формируем первый отчёт: VALUE TOP 15 ---
     lines1 = []
     lines1.append("="*60)
-    lines1.append(f"📈 VALUE TOP-20 (недооценённые) | {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    lines1.append(f"📈 VALUE TOP-15 (недооценённые) | {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     lines1.append("="*60)
     for i, (ticker, region, score, m) in enumerate(top_value, 1):
         peg = m.get('peg')
@@ -376,10 +376,10 @@ def run():
     lines1.append("="*60)
     lines1.append("⚠️ Не ИИР. Изучите бизнес самостоятельно.")
     
-    # --- Второй отчёт: GROWTH TOP 20 ---
+    # --- Второй отчёт: GROWTH TOP 15 ---
     lines2 = []
     lines2.append("="*60)
-    lines2.append(f"🚀 GROWTH TOP-20 (высокий потенциал роста) | {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    lines2.append(f"🚀 GROWTH TOP-15 (высокий потенциал роста) | {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     lines2.append("="*60)
     for i, (ticker, region, score, m) in enumerate(top_growth, 1):
         rev = m.get('revenue_growth')
