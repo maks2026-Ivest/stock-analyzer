@@ -143,8 +143,9 @@ def compute_value_score(m, region):
     if m is None:
         return None
     score = 0.0
+    # PEG
     peg = m.get('peg')
-    if peg is not None:
+    if peg is not None and isinstance(peg, (int, float)):
         if peg < 0.7:
             score += 5.0
         elif peg < 1.0:
@@ -153,8 +154,9 @@ def compute_value_score(m, region):
             score += 2.0
         elif peg < 1.6:
             score += 1.0
+    # P/E
     pe = m.get('pe')
-    if pe is not None:
+    if pe is not None and isinstance(pe, (int, float)):
         target = 15 if region == 'US' else 12
         if pe < target:
             score += max(0, 4.0 * (1 - pe / target))
@@ -162,8 +164,9 @@ def compute_value_score(m, region):
             score += 1.0
         elif pe < target * 1.6:
             score += 0.5
+    # ROE
     roe = m.get('roe')
-    if roe is not None:
+    if roe is not None and isinstance(roe, (int, float)):
         if region == 'US':
             if roe > 0.25:
                 score += 4.0
@@ -182,8 +185,9 @@ def compute_value_score(m, region):
                 score += 2.0
             elif roe > 0.08:
                 score += 1.0
+    # Рост выручки
     rev_g = m.get('revenue_growth')
-    if rev_g is not None:
+    if rev_g is not None and isinstance(rev_g, (int, float)):
         if rev_g > 0.20:
             score += 4.0
         elif rev_g > 0.15:
@@ -192,14 +196,16 @@ def compute_value_score(m, region):
             score += 2.0
         elif rev_g > 0.05:
             score += 1.0
+    # FCF Yield
     fcf = m.get('fcf_yield')
-    if fcf is not None:
+    if fcf is not None and isinstance(fcf, (int, float)):
         if fcf > 0.08:
             score += 2.0
         elif fcf > 0.05:
             score += 1.0
+    # Штраф за долг
     debt = m.get('debt')
-    if debt is not None:
+    if debt is not None and isinstance(debt, (int, float)):
         if debt > 1.5:
             score -= 2.0
         elif debt > 1.0:
@@ -207,7 +213,6 @@ def compute_value_score(m, region):
         elif debt > 0.7:
             score -= 0.5
     return round(score, 2)
-
 # -------------------------------------------------------------------
 # 4. GROWTH SCORE (ПОТЕНЦИАЛ РОСТА)
 # -------------------------------------------------------------------
@@ -216,7 +221,7 @@ def compute_growth_score(m):
         return None
     score = 0.0
     rev = m.get('revenue_growth')
-    if rev is not None:
+    if rev is not None and isinstance(rev, (int, float)):
         if rev > 0.40:
             score += 6.0
         elif rev > 0.30:
@@ -228,7 +233,7 @@ def compute_growth_score(m):
         elif rev > 0.10:
             score += 1.0
     eps = m.get('eps_growth')
-    if eps is not None:
+    if eps is not None and isinstance(eps, (int, float)):
         if eps > 0.40:
             score += 6.0
         elif eps > 0.30:
@@ -240,7 +245,7 @@ def compute_growth_score(m):
         elif eps > 0.10:
             score += 1.0
     roe = m.get('roe')
-    if roe is not None:
+    if roe is not None and isinstance(roe, (int, float)):
         if roe > 0.25:
             score += 4.0
         elif roe > 0.20:
@@ -250,13 +255,13 @@ def compute_growth_score(m):
         elif roe > 0.10:
             score += 1.0
     fcf = m.get('fcf_yield')
-    if fcf is not None:
+    if fcf is not None and isinstance(fcf, (int, float)):
         if fcf > 0.08:
             score += 2.0
         elif fcf > 0.05:
             score += 1.0
     debt = m.get('debt')
-    if debt is not None:
+    if debt is not None and isinstance(debt, (int, float)):
         if debt > 1.5:
             score -= 2.0
         elif debt > 1.0:
