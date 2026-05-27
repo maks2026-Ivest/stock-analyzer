@@ -17,20 +17,17 @@ warnings.filterwarnings('ignore')
 # 1. ЗАГРУЗКА СПИСКОВ США (РАЗДЕЛЬНО ДЛЯ S&P 500 И NASDAQ 100)
 # -------------------------------------------------------------------
 def load_sp500_tickers():
-    """Загружает список S&P 500"""
     url = 'https://raw.githubusercontent.com/datasets/s-and-p-500-companies/main/data/constituents.csv'
     try:
         df = pd.read_csv(url)
-        tickers = df['Symbol'].str.replace('.', '-').tolist()
-        return tickers
+        return df['Symbol'].str.replace('.', '-').tolist()
     except Exception as e:
-        print(f"Ошибка загрузки S&P 500: {e}")
+        print(f"Ошибка S&P 500: {e}")
         return []
 
 def load_nasdaq100_tickers():
-    """Загружает список NASDAQ 100: онлайн-источники > локальный CSV > резервный список"""
-    
-    # 1. Онлайн-источник (yfiua)
+    """Загружает список NASDAQ 100: онлайн > локальный CSV > резерв"""
+    # 1. Онлайн-источник
     url = 'https://yfiua.github.io/index-constituents/constituents-nasdaq100.csv'
     try:
         df = pd.read_csv(url)
@@ -39,28 +36,13 @@ def load_nasdaq100_tickers():
         else:
             tickers = df.iloc[:, 0].tolist()
         tickers = [t.strip() for t in tickers if isinstance(t, str) and t.strip()]
-        print(f"✅ NASDAQ 100: загружено {len(tickers)} тикеров из онлайн-источника (yfiua)")
-        return tickers
+        if tickers:
+            print(f"✅ NASDAQ 100: загружено {len(tickers)} тикеров (онлайн)")
+            return tickers
     except Exception as e:
-        print(f"Ошибка загрузки из {url}: {e}")
+        print(f"Ошибка онлайн-источника NASDAQ: {e}")
     
-    # 2. Резервный онлайн-источник (johnbumgardner)
-    fallback_url = 'https://raw.githubusercontent.com/johnbumgardner/nasdaq100/master/nasdaq100.csv'
-    try:
-        df = pd.read_csv(fallback_url)
-        if 'Symbol' in df.columns:
-            tickers = df['Symbol'].tolist()
-        elif 'Ticker' in df.columns:
-            tickers = df['Ticker'].tolist()
-        else:
-            tickers = df.iloc[:, 0].tolist()
-        tickers = [t.strip() for t in tickers if isinstance(t, str) and t.strip()]
-        print(f"✅ NASDAQ 100: загружено {len(tickers)} тикеров из онлайн-источника (johnbumgardner)")
-        return tickers
-    except Exception as e:
-        print(f"Ошибка загрузки из {fallback_url}: {e}")
-    
-    # 3. Локальный CSV-файл (как для Европы)
+    # 2. Локальный CSV
     try:
         df = pd.read_csv('nasdaq100.csv')
         if 'ticker' in df.columns:
@@ -71,21 +53,15 @@ def load_nasdaq100_tickers():
         if tickers:
             print(f"✅ NASDAQ 100: загружено {len(tickers)} тикеров из локального CSV")
             return tickers
-    except Exception as e:
-        print(f"Локальный файл nasdaq100.csv не загружен: {e}")
+    except:
+        pass
     
-    # 4. Ручной резервный список
-    fallback_list = ['AAPL', 'MSFT', 'NVDA', 'GOOGL', 'META', 'AVGO', 'AMD', 'ASML', 'ORCL', 'CRM',
-    'AMZN', 'COST', 'WMT', 'HD', 'NKE', 'V', 'MA', 'JPM', 'BAC', 'LLY',
-    'UNH', 'JNJ', 'MRK', 'ABBV', 'TSLA', 'XOM', 'CVX', 'CAT', 'GE', 'NFLX']
-    print(f"⚠️ Использую резервный список из {len(fallback_list)} тикеров")
-    return fallback_list
+    # 3. Резерв
+    fallback = ['AAPL', 'MSFT', 'NVDA', 'GOOGL', 'META', 'TSLA', 'AMZN', 'ADBE', 'NFLX', 'PYPL']
+    print(f"⚠️ Использую резервный список NASDAQ 100 ({len(fallback)})")
+    return fallback
 
-# -------------------------------------------------------------------
-# 2. ЗАГРУЗКА СПИСКА ЕВРОПЫ (ЛОКАЛЬНЫЙ CSV + РЕЗЕРВ)
-# -------------------------------------------------------------------
 def load_local_eu_tickers():
-    """Пытается загрузить stoxx600_full.csv из репозитория"""
     try:
         df = pd.read_csv('stoxx600_full.csv')
         if 'ticker' in df.columns:
@@ -96,24 +72,20 @@ def load_local_eu_tickers():
         return None
 
 def get_eu_tickers():
-    """Загружает европейские тикеры: локальный CSV > резерв"""
     print("Загружаю европейские тикеры...")
     tickers = load_local_eu_tickers()
     if tickers:
         print(f"  Загружено {len(tickers)} тикеров из локального CSV")
         return tickers
-    # Резервный список крупнейших европейских компаний
     fallback = ['ASML.AS', 'SAP.DE', 'IFX.DE', 'OR.PA', 'TTE.PA', 'SAN.PA', 
-                'NOVO-B.CO', 'MC.PA', 'NESN.SW', 'ULVR.L', 'BN.PA', 'AIR.PA',
-                'SU.PA', 'ELI.PA', 'INGA.AS', 'UBSG.SW', 'ABBN.SW', 'ROG.SW',
-                'RWE.DE', 'LIN.DE']
+                'NOVO-B.CO', 'MC.PA', 'NESN.SW', 'ULVR.L', 'BN.PA', 'AIR.PA']
     print(f"  Использую резервный список ({len(fallback)} тикеров)")
     return fallback
 
 # -------------------------------------------------------------------
-# 3. ПОЛУЧЕНИЕ МЕТРИК (VALUE SCORE 0..20)
+# 2. ФУНКЦИЯ СБОРА МЕТРИК (ОБЩАЯ ДЛЯ ОБОИХ ПОДХОДОВ)
 # -------------------------------------------------------------------
-def get_metrics(ticker, region):
+def get_all_metrics(ticker, region):
     try:
         stock = yf.Ticker(ticker)
         info = stock.info
@@ -137,88 +109,175 @@ def get_metrics(ticker, region):
         except:
             pass
         
-        score = 0.0
-        # PEG
-        if peg is not None:
-            if peg < 0.7:
-                score += 5.0
-            elif peg < 1.0:
-                score += 4.0
-            elif peg < 1.3:
-                score += 2.0
-            elif peg < 1.6:
-                score += 1.0
-        # P/E
-        if pe is not None:
-            target = 15 if region == 'US' else 12
-            if pe < target:
-                score += max(0, 4.0 * (1 - pe / target))
-            elif pe < target * 1.3:
-                score += 1.0
-            elif pe < target * 1.6:
-                score += 0.5
-        # ROE
-        if roe is not None:
-            if region == 'US':
-                if roe > 0.25:
-                    score += 4.0
-                elif roe > 0.20:
-                    score += 3.0
-                elif roe > 0.15:
-                    score += 2.0
-                elif roe > 0.10:
-                    score += 1.0
-            else:
-                if roe > 0.20:
-                    score += 4.0
-                elif roe > 0.15:
-                    score += 3.0
-                elif roe > 0.12:
-                    score += 2.0
-                elif roe > 0.08:
-                    score += 1.0
-        # Рост выручки
-        if revenue_growth is not None:
-            if revenue_growth > 0.20:
-                score += 4.0
-            elif revenue_growth > 0.15:
-                score += 3.0
-            elif revenue_growth > 0.10:
-                score += 2.0
-            elif revenue_growth > 0.05:
-                score += 1.0
-        # FCF Yield
-        if fcf_yield is not None:
-            if fcf_yield > 0.08:
-                score += 2.0
-            elif fcf_yield > 0.05:
-                score += 1.0
-        # Штраф за долг
-        if debt is not None:
-            if debt > 1.5:
-                score -= 2.0
-            elif debt > 1.0:
-                score -= 1.0
-            elif debt > 0.7:
-                score -= 0.5
-        if score == 0:
-            return None
+        # Рост EPS (3 года CAGR)
+        eps_growth = None
+        try:
+            earn = stock.earnings
+            if earn is not None and len(earn) >= 3:
+                eps = earn['earnings']
+                first = eps.iloc[-1]
+                last = eps.iloc[0]
+                years = len(eps) - 1
+                eps_growth = (last / first) ** (1/years) - 1
+        except:
+            pass
+        
         return {
             'ticker': ticker,
             'region': region,
             'pe': pe,
             'peg': peg,
             'roe': roe,
-            'revenue_growth': revenue_growth,
             'fcf_yield': fcf_yield,
             'debt': debt,
-            'total': round(score, 2)
+            'revenue_growth': revenue_growth,
+            'eps_growth': eps_growth,
         }
     except Exception:
         return None
 
 # -------------------------------------------------------------------
-# 4. ОТПРАВКА В TELEGRAM
+# 3. VALUE SCORE (НЕДООЦЕНЁННОСТЬ) – ОСТАЁТСЯ БЕЗ ИЗМЕНЕНИЙ
+# -------------------------------------------------------------------
+def compute_value_score(m, region):
+    if m is None:
+        return None
+    score = 0.0
+    # PEG
+    peg = m.get('peg')
+    if peg is not None:
+        if peg < 0.7:
+            score += 5.0
+        elif peg < 1.0:
+            score += 4.0
+        elif peg < 1.3:
+            score += 2.0
+        elif peg < 1.6:
+            score += 1.0
+    # P/E
+    pe = m.get('pe')
+    if pe is not None:
+        target = 15 if region == 'US' else 12
+        if pe < target:
+            score += max(0, 4.0 * (1 - pe / target))
+        elif pe < target * 1.3:
+            score += 1.0
+        elif pe < target * 1.6:
+            score += 0.5
+    # ROE
+    roe = m.get('roe')
+    if roe is not None:
+        if region == 'US':
+            if roe > 0.25:
+                score += 4.0
+            elif roe > 0.20:
+                score += 3.0
+            elif roe > 0.15:
+                score += 2.0
+            elif roe > 0.10:
+                score += 1.0
+        else:
+            if roe > 0.20:
+                score += 4.0
+            elif roe > 0.15:
+                score += 3.0
+            elif roe > 0.12:
+                score += 2.0
+            elif roe > 0.08:
+                score += 1.0
+    # Рост выручки
+    rev_g = m.get('revenue_growth')
+    if rev_g is not None:
+        if rev_g > 0.20:
+            score += 4.0
+        elif rev_g > 0.15:
+            score += 3.0
+        elif rev_g > 0.10:
+            score += 2.0
+        elif rev_g > 0.05:
+            score += 1.0
+    # FCF Yield
+    fcf = m.get('fcf_yield')
+    if fcf is not None:
+        if fcf > 0.08:
+            score += 2.0
+        elif fcf > 0.05:
+            score += 1.0
+    # Штраф за долг
+    debt = m.get('debt')
+    if debt is not None:
+        if debt > 1.5:
+            score -= 2.0
+        elif debt > 1.0:
+            score -= 1.0
+        elif debt > 0.7:
+            score -= 0.5
+    return round(score, 2)
+
+# -------------------------------------------------------------------
+# 4. GROWTH SCORE (ПОТЕНЦИАЛ РОСТА) – НОВАЯ ФУНКЦИЯ
+# -------------------------------------------------------------------
+def compute_growth_score(m):
+    if m is None:
+        return None
+    score = 0.0
+    # Рост выручки (максимум 6 баллов)
+    rev = m.get('revenue_growth')
+    if rev is not None:
+        if rev > 0.40:
+            score += 6.0
+        elif rev > 0.30:
+            score += 5.0
+        elif rev > 0.20:
+            score += 4.0
+        elif rev > 0.15:
+            score += 2.0
+        elif rev > 0.10:
+            score += 1.0
+    # Рост EPS (максимум 6)
+    eps = m.get('eps_growth')
+    if eps is not None:
+        if eps > 0.40:
+            score += 6.0
+        elif eps > 0.30:
+            score += 5.0
+        elif eps > 0.20:
+            score += 4.0
+        elif eps > 0.15:
+            score += 2.0
+        elif eps > 0.10:
+            score += 1.0
+    # ROE (максимум 4)
+    roe = m.get('roe')
+    if roe is not None:
+        if roe > 0.25:
+            score += 4.0
+        elif roe > 0.20:
+            score += 3.0
+        elif roe > 0.15:
+            score += 2.0
+        elif roe > 0.10:
+            score += 1.0
+    # FCF Yield (максимум 2)
+    fcf = m.get('fcf_yield')
+    if fcf is not None:
+        if fcf > 0.08:
+            score += 2.0
+        elif fcf > 0.05:
+            score += 1.0
+    # Штраф за долг
+    debt = m.get('debt')
+    if debt is not None:
+        if debt > 1.5:
+            score -= 2.0
+        elif debt > 1.0:
+            score -= 1.0
+        elif debt > 0.7:
+            score -= 0.5
+    return round(score, 2)
+
+# -------------------------------------------------------------------
+# 5. ОТПРАВКА В TELEGRAM
 # -------------------------------------------------------------------
 def send_telegram(text):
     token = os.environ.get('TELEGRAM_TOKEN')
@@ -239,143 +298,119 @@ def send_telegram(text):
         print(f"Ошибка: {e}")
 
 # -------------------------------------------------------------------
-# 5. ОСНОВНАЯ ФУНКЦИЯ (С РАЗДЕЛЬНОЙ СТАТИСТИКОЙ ПО ИНДЕКСАМ США)
+# 6. ОСНОВНАЯ ФУНКЦИЯ (ВЫДАЁТ ДВА ТОПА)
 # -------------------------------------------------------------------
 def run():
     print(f"📊 Старт {datetime.now()}\n")
     
-    # --- Загрузка списков США раздельно ---
-    sp500_tickers = load_sp500_tickers()
-    nasdaq100_tickers = load_nasdaq100_tickers()
+    # Загрузка списков
+    sp500 = load_sp500_tickers()
+    nasdaq = load_nasdaq100_tickers()
+    eu = get_eu_tickers()
     
-    # Объединение для сканирования (уникальные)
-    us_tickers = list(set(sp500_tickers + nasdaq100_tickers))
+    us_tickers = list(set(sp500 + nasdaq))
+    print(f"🇺🇸 S&P 500: {len(sp500)} | NASDAQ 100: {len(nasdaq)} | Уникальных США: {len(us_tickers)}")
+    print(f"🇪🇺 Европа: {len(eu)} тикеров")
     
-    print(f"🇺🇸 S&P 500: загружено {len(sp500_tickers)} тикеров")
-    print(f"🇺🇸 NASDAQ 100: загружено {len(nasdaq100_tickers)} тикеров")
-    print(f"🇺🇸 Всего уникальных тикеров США: {len(us_tickers)}")
+    all_metrics = []
     
-    # --- Загрузка европейских тикеров ---
-    eu_tickers = get_eu_tickers()
-    print(f"🇪🇺 Европа: загружено {len(eu_tickers)} тикеров")
-    
-    all_res = []
-    
-    # Счётчики для США по индексам
-    sp500_processed = 0
-    nasdaq100_processed = 0
-    sp500_failed = []
-    nasdaq100_failed = []
-    
-    # Сканирование США (уникальные тикеры)
+    # Сканирование США
     print("\n🇺🇸 Сканирование США...")
     for i, t in enumerate(us_tickers):
         if i % 50 == 0:
             print(f"  {i}/{len(us_tickers)}")
-        m = get_metrics(t, 'US')
+        m = get_all_metrics(t, 'US')
         if m:
-            all_res.append(m)
-        # Определяем принадлежность к индексам
-        in_sp500 = t in sp500_tickers
-        in_nasdaq = t in nasdaq100_tickers
-        if m:
-            if in_sp500:
-                sp500_processed += 1
-            if in_nasdaq:
-                nasdaq100_processed += 1
-        else:
-            if in_sp500:
-                sp500_failed.append(t)
-            if in_nasdaq:
-                nasdaq100_failed.append(t)
+            all_metrics.append((t, 'US', m))
         time.sleep(0.25)
     
     # Сканирование Европы
-    eu_processed = 0
-    eu_failed = []
     print("\n🇪🇺 Сканирование Европы...")
-    for i, t in enumerate(eu_tickers):
+    for i, t in enumerate(eu):
         if i % 50 == 0:
-            print(f"  {i}/{len(eu_tickers)}")
-        m = get_metrics(t, 'EU')
+            print(f"  {i}/{len(eu)}")
+        m = get_all_metrics(t, 'EU')
         if m:
-            all_res.append(m)
-            eu_processed += 1
-        else:
-            eu_failed.append(t)
+            all_metrics.append((t, 'EU', m))
         time.sleep(0.25)
     
-    # Сортировка и топ-20
-    all_res.sort(key=lambda x: x['total'], reverse=True)
-    top20 = all_res[:20]
-    total_analyzed = len(all_res)
-    peg_values = [r['peg'] for r in all_res if r.get('peg') is not None]
-    avg_peg = np.mean(peg_values) if peg_values else 0
+    # Расчёт обеих оценок
+    value_list = []   # (ticker, region, score, metrics)
+    growth_list = []
     
-    # Формирование отчёта
-    lines = []
-    lines.append("="*60)
-    lines.append(f"📈 ТОП-20 | {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    lines.append("="*60)
-    for i, r in enumerate(top20, 1):
-        lines.append(f"{i}. {r['ticker']} ({r['region']}) | Score: {r['total']:.2f}")
+    for ticker, region, m in all_metrics:
+        v = compute_value_score(m, region)
+        if v is not None and v > 0:
+            value_list.append((ticker, region, v, m))
+        g = compute_growth_score(m)
+        if g is not None and g > 0:
+            growth_list.append((ticker, region, g, m))
+    
+    value_list.sort(key=lambda x: x[2], reverse=True)
+    growth_list.sort(key=lambda x: x[2], reverse=True)
+    
+    top_value = value_list[:20]
+    top_growth = growth_list[:20]
+    
+    # --- Формируем первый отчёт: VALUE TOP 20 ---
+    lines1 = []
+    lines1.append("="*60)
+    lines1.append(f"📈 VALUE TOP-20 (недооценённые) | {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    lines1.append("="*60)
+    for i, (ticker, region, score, m) in enumerate(top_value, 1):
+        peg = m.get('peg')
+        pe = m.get('pe')
+        roe = m.get('roe')
+        rev = m.get('revenue_growth')
+        lines1.append(f"{i}. {ticker} ({region}) | Score: {score:.2f}")
         detail = []
-        if r.get('peg'): detail.append(f"PEG: {r['peg']:.2f}")
-        if r.get('pe'): detail.append(f"P/E: {r['pe']:.1f}")
-        if r.get('roe'): detail.append(f"ROE: {r['roe']*100:.1f}%")
+        if peg is not None: detail.append(f"PEG: {peg:.2f}")
+        if pe is not None: detail.append(f"P/E: {pe:.1f}")
+        if roe is not None: detail.append(f"ROE: {roe*100:.1f}%")
         if detail:
-            lines.append("   " + " | ".join(detail))
-        if r.get('revenue_growth'):
-            lines.append(f"   Рост выручки: {r['revenue_growth']*100:.1f}%")
-        if r.get('fcf_yield'):
-            lines.append(f"   FCF Yield: {r['fcf_yield']*100:.1f}%")
-        lines.append("")
+            lines1.append("   " + " | ".join(detail))
+        if rev is not None:
+            lines1.append(f"   Рост выручки: {rev*100:.1f}%")
+        lines1.append("")
+    lines1.append(f"📊 Всего компаний с Value Score > 0: {len(value_list)}")
+    lines1.append("="*60)
+    lines1.append("⚠️ Не ИИР. Изучите бизнес самостоятельно.")
     
-    # Статистика обработки
-    lines.append(f"📊 **Статистика обработки:**")
-    lines.append(f"   🇺🇸 S&P 500: загружено {len(sp500_tickers)}, проанализировано {sp500_processed}, не прошло {len(sp500_failed)}")
-    lines.append(f"   🇺🇸 NASDAQ 100: загружено {len(nasdaq100_tickers)}, проанализировано {nasdaq100_processed}, не прошло {len(nasdaq100_failed)}")
-    lines.append(f"   🇺🇸 Всего уникальных тикеров США: {len(us_tickers)}")
-    lines.append(f"   🇪🇺 Европа: загружено {len(eu_tickers)}, проанализировано {eu_processed}, не прошло {len(eu_failed)}")
-    lines.append(f"   📋 Всего проанализировано (score > 0): {total_analyzed}")
-    if peg_values:
-        lines.append(f"   📈 Средний PEG среди найденных: {avg_peg:.2f}")
+    # --- Второй отчёт: GROWTH TOP 20 ---
+    lines2 = []
+    lines2.append("="*60)
+    lines2.append(f"🚀 GROWTH TOP-20 (высокий потенциал роста) | {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    lines2.append("="*60)
+    for i, (ticker, region, score, m) in enumerate(top_growth, 1):
+        rev = m.get('revenue_growth')
+        eps = m.get('eps_growth')
+        roe = m.get('roe')
+        pe = m.get('pe')
+        lines2.append(f"{i}. {ticker} ({region}) | Score: {score:.2f}")
+        detail = []
+        if rev is not None: detail.append(f"Рост выручки: {rev*100:.1f}%")
+        if eps is not None: detail.append(f"Рост EPS: {eps*100:.1f}%")
+        if roe is not None: detail.append(f"ROE: {roe*100:.1f}%")
+        if pe is not None: detail.append(f"P/E: {pe:.1f}")
+        if detail:
+            lines2.append("   " + " | ".join(detail))
+        lines2.append("")
+    lines2.append(f"📊 Всего компаний с Growth Score > 0: {len(growth_list)}")
+    lines2.append("="*60)
+    lines2.append("⚠️ Не ИИР. Изучите бизнес самостоятельно.")
     
-    # Первые 10 непрошедших (для примера)
-    if sp500_failed:
-        lines.append(f"\n⚠️ Примеры тикеров S&P 500, не прошедших фильтр (первые 10):")
-        lines.append(f"   {', '.join(sp500_failed[:10])}")
-    if nasdaq100_failed:
-        lines.append(f"\n⚠️ Примеры тикеров NASDAQ 100, не прошедших фильтр (первые 10):")
-        lines.append(f"   {', '.join(nasdaq100_failed[:10])}")
-    if eu_failed:
-        lines.append(f"\n⚠️ Примеры тикеров Европы, не прошедших фильтр (первые 10):")
-        lines.append(f"   {', '.join(eu_failed[:10])}")
+    report1 = "\n".join(lines1)
+    report2 = "\n".join(lines2)
     
-    lines.append("="*60)
-    lines.append("⚠️ Не ИИР. Изучите бизнес самостоятельно.")
+    print(report1)
+    print("\n" + "="*60 + "\n")
+    print(report2)
     
-    # Сохраняем непрошедшие в CSV (артефакт)
-    if sp500_failed or nasdaq100_failed or eu_failed:
-        failed_data = []
-        for t in sp500_failed:
-            failed_data.append({'ticker': t, 'region': 'S&P 500'})
-        for t in nasdaq100_failed:
-            failed_data.append({'ticker': t, 'region': 'NASDAQ 100'})
-        for t in eu_failed:
-            failed_data.append({'ticker': t, 'region': 'EU'})
-        df_failed = pd.DataFrame(failed_data)
-        df_failed.to_csv('failed_tickers.csv', index=False)
-        print(f"💾 Список непрошедших компаний сохранён в failed_tickers.csv")
+    send_telegram(report1)
+    time.sleep(1)
+    send_telegram(report2)
     
-    report = "\n".join(lines)
-    print(report)
-    send_telegram(report)
-    
-    with open(f"stock_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt", "w", encoding="utf-8") as f:
-        f.write(report)
-    
-    print("\n✅ Готово")
+    print("\n✅ Два отчёта отправлены")
 
 if __name__ == "__main__":
     run()
