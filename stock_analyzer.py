@@ -137,13 +137,12 @@ def get_all_metrics(ticker, region):
         return None
 
 # -------------------------------------------------------------------
-# 3. VALUE SCORE (НЕДООЦЕНЁННОСТЬ) – ОСТАЁТСЯ БЕЗ ИЗМЕНЕНИЙ
+# 3. VALUE SCORE (НЕДООЦЕНЁННОСТЬ)
 # -------------------------------------------------------------------
 def compute_value_score(m, region):
     if m is None:
         return None
     score = 0.0
-    # PEG
     peg = m.get('peg')
     if peg is not None:
         if peg < 0.7:
@@ -154,7 +153,6 @@ def compute_value_score(m, region):
             score += 2.0
         elif peg < 1.6:
             score += 1.0
-    # P/E
     pe = m.get('pe')
     if pe is not None:
         target = 15 if region == 'US' else 12
@@ -164,7 +162,6 @@ def compute_value_score(m, region):
             score += 1.0
         elif pe < target * 1.6:
             score += 0.5
-    # ROE
     roe = m.get('roe')
     if roe is not None:
         if region == 'US':
@@ -185,7 +182,6 @@ def compute_value_score(m, region):
                 score += 2.0
             elif roe > 0.08:
                 score += 1.0
-    # Рост выручки
     rev_g = m.get('revenue_growth')
     if rev_g is not None:
         if rev_g > 0.20:
@@ -196,14 +192,12 @@ def compute_value_score(m, region):
             score += 2.0
         elif rev_g > 0.05:
             score += 1.0
-    # FCF Yield
     fcf = m.get('fcf_yield')
     if fcf is not None:
         if fcf > 0.08:
             score += 2.0
         elif fcf > 0.05:
             score += 1.0
-    # Штраф за долг
     debt = m.get('debt')
     if debt is not None:
         if debt > 1.5:
@@ -215,13 +209,12 @@ def compute_value_score(m, region):
     return round(score, 2)
 
 # -------------------------------------------------------------------
-# 4. GROWTH SCORE (ПОТЕНЦИАЛ РОСТА) – НОВАЯ ФУНКЦИЯ
+# 4. GROWTH SCORE (ПОТЕНЦИАЛ РОСТА)
 # -------------------------------------------------------------------
 def compute_growth_score(m):
     if m is None:
         return None
     score = 0.0
-    # Рост выручки (максимум 6 баллов)
     rev = m.get('revenue_growth')
     if rev is not None:
         if rev > 0.40:
@@ -234,7 +227,6 @@ def compute_growth_score(m):
             score += 2.0
         elif rev > 0.10:
             score += 1.0
-    # Рост EPS (максимум 6)
     eps = m.get('eps_growth')
     if eps is not None:
         if eps > 0.40:
@@ -247,7 +239,6 @@ def compute_growth_score(m):
             score += 2.0
         elif eps > 0.10:
             score += 1.0
-    # ROE (максимум 4)
     roe = m.get('roe')
     if roe is not None:
         if roe > 0.25:
@@ -258,14 +249,12 @@ def compute_growth_score(m):
             score += 2.0
         elif roe > 0.10:
             score += 1.0
-    # FCF Yield (максимум 2)
     fcf = m.get('fcf_yield')
     if fcf is not None:
         if fcf > 0.08:
             score += 2.0
         elif fcf > 0.05:
             score += 1.0
-    # Штраф за долг
     debt = m.get('debt')
     if debt is not None:
         if debt > 1.5:
@@ -303,6 +292,14 @@ def send_telegram(text):
 def run():
     print(f"📊 Старт {datetime.now()}\n")
     
+    # === ПРОВЕРКА НАЛИЧИЯ ФАЙЛОВ ===
+    print("Проверка файлов:")
+    for f in ['stoxx600_full.csv', 'nasdaq100.csv']:
+        if os.path.exists(f):
+            print(f"  ✅ {f} найден")
+        else:
+            print(f"  ❌ {f} НЕ НАЙДЕН")
+    
     # Загрузка списков
     sp500 = load_sp500_tickers()
     nasdaq = load_nasdaq100_tickers()
@@ -335,7 +332,7 @@ def run():
         time.sleep(0.25)
     
     # Расчёт обеих оценок
-    value_list = []   # (ticker, region, score, metrics)
+    value_list = []
     growth_list = []
     
     for ticker, region, m in all_metrics:
@@ -352,7 +349,7 @@ def run():
     top_value = value_list[:15]
     top_growth = growth_list[:15]
     
-    # --- Формируем первый отчёт: VALUE TOP 15 ---
+    # --- VALUE TOP 15 ---
     lines1 = []
     lines1.append("="*60)
     lines1.append(f"📈 VALUE TOP-15 (недооценённые) | {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -376,7 +373,7 @@ def run():
     lines1.append("="*60)
     lines1.append("⚠️ Не ИИР. Изучите бизнес самостоятельно.")
     
-    # --- Второй отчёт: GROWTH TOP 15 ---
+    # --- GROWTH TOP 15 ---
     lines2 = []
     lines2.append("="*60)
     lines2.append(f"🚀 GROWTH TOP-15 (высокий потенциал роста) | {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
