@@ -297,7 +297,7 @@ def send_telegram(text):
 def run():
     print(f"📊 Старт {datetime.now()}\n")
     
-    # === ПРОВЕРКА НАЛИЧИЯ ФАЙЛОВ ===
+    # Проверка наличия файлов
     print("Проверка файлов:")
     for f in ['stoxx600_full.csv', 'nasdaq100.csv']:
         if os.path.exists(f):
@@ -314,7 +314,13 @@ def run():
     print(f"🇺🇸 S&P 500: {len(sp500)} | NASDAQ 100: {len(nasdaq)} | Уникальных США: {len(us_tickers)}")
     print(f"🇪🇺 Европа: {len(eu)} тикеров")
     
-    all_metrics = []
+    all_metrics = []          # (ticker, region, metrics)
+    
+    # Счётчики для статистики
+    sp500_processed = 0
+    nasdaq100_processed = 0
+    sp500_failed = []
+    nasdaq100_failed = []
     
     # Сканирование США
     print("\n🇺🇸 Сканирование США...")
@@ -322,11 +328,25 @@ def run():
         if i % 50 == 0:
             print(f"  {i}/{len(us_tickers)}")
         m = get_all_metrics(t, 'US')
+        # Определяем принадлежность к индексам
+        in_sp500 = t in sp500
+        in_nasdaq = t in nasdaq
         if m:
             all_metrics.append((t, 'US', m))
+            if in_sp500:
+                sp500_processed += 1
+            if in_nasdaq:
+                nasdaq100_processed += 1
+        else:
+            if in_sp500:
+                sp500_failed.append(t)
+            if in_nasdaq:
+                nasdaq100_failed.append(t)
         time.sleep(0.25)
     
     # Сканирование Европы
+    eu_processed = 0
+    eu_failed = []
     print("\n🇪🇺 Сканирование Европы...")
     for i, t in enumerate(eu):
         if i % 50 == 0:
@@ -334,12 +354,14 @@ def run():
         m = get_all_metrics(t, 'EU')
         if m:
             all_metrics.append((t, 'EU', m))
+            eu_processed += 1
+        else:
+            eu_failed.append(t)
         time.sleep(0.25)
     
-    # Расчёт обеих оценок
+    # Расчёт оценок
     value_list = []
     growth_list = []
-    
     for ticker, region, m in all_metrics:
         v = compute_value_score(m, region)
         if v is not None and v > 0:
@@ -354,7 +376,11 @@ def run():
     top_value = value_list[:15]
     top_growth = growth_list[:15]
     
-    # --- VALUE TOP 15 ---
+    total_analyzed = len(all_metrics)
+    peg_values = [m['peg'] for _,_,_,m in all_metrics if m.get('peg') is not None and isinstance(m['peg'], (int,float))]
+    avg_peg = np.mean(peg_values) if peg_values else 0
+    
+    # --- ОТЧЁТ VALUE TOP-15 (со статистикой) ---
     lines1 = []
     lines1.append("="*60)
     lines1.append(f"📈 VALUE TOP-15 (недооценённые) | {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -366,19 +392,39 @@ def run():
         rev = m.get('revenue_growth')
         lines1.append(f"{i}. {ticker} ({region}) | Score: {score:.2f}")
         detail = []
-        if peg is not None: detail.append(f"PEG: {peg:.2f}")
-        if pe is not None: detail.append(f"P/E: {pe:.1f}")
-        if roe is not None: detail.append(f"ROE: {roe*100:.1f}%")
+        if peg is not None and isinstance(peg, (int,float)): detail.append(f"PEG: {peg:.2f}")
+        if pe is not None and isinstance(pe, (int,float)): detail.append(f"P/E: {pe:.1f}")
+        if roe is not None and isinstance(roe, (int,float)): detail.append(f"ROE: {roe*100:.1f}%")
         if detail:
             lines1.append("   " + " | ".join(detail))
-        if rev is not None:
+        if rev is not None and isinstance(rev, (int,float)):
             lines1.append(f"   Рост выручки: {rev*100:.1f}%")
         lines1.append("")
-    lines1.append(f"📊 Всего компаний с Value Score > 0: {len(value_list)}")
+    
+    # Статистика обработки
+    lines1.append("📊 **Статистика обработки:**")
+    lines1.append(f"   🇺🇸 S&P 500: загружено {len(sp500)}, проанализировано {sp500_processed}, не прошло {len(sp500_failed)}")
+    lines1.append(f"   🇺🇸 NASDAQ 100: загружено {len(nasdaq)}, проанализировано {nasdaq100_processed}, не прошло {len(nasdaq100_failed)}")
+    lines1.append(f"   🇺🇸 Всего уникальных тикеров США: {len(us_tickers)}")
+    lines1.append(f"   🇪🇺 Европа: загружено {len(eu)}, проанализировано {eu_processed}, не прошло {len(eu_failed)}")
+    lines1.append(f"   📋 Всего проанализировано (score > 0): {total_analyzed}")
+    lines1.append(f"   📈 Средний PEG среди найденных: {avg_peg:.2f}")
+    
+    # Примеры непрошедших (первые 10)
+    if sp500_failed:
+        lines1.append(f"\n⚠️ Примеры тикеров S&P 500, не прошедших фильтр (первые 10):")
+        lines1.append(f"   {', '.join(sp500_failed[:10])}")
+    if nasdaq100_failed:
+        lines1.append(f"\n⚠️ Примеры тикеров NASDAQ 100, не прошедших фильтр (первые 10):")
+        lines1.append(f"   {', '.join(nasdaq100_failed[:10])}")
+    if eu_failed:
+        lines1.append(f"\n⚠️ Примеры тикеров Европы, не прошедших фильтр (первые 10):")
+        lines1.append(f"   {', '.join(eu_failed[:10])}")
+    
     lines1.append("="*60)
     lines1.append("⚠️ Не ИИР. Изучите бизнес самостоятельно.")
     
-    # --- GROWTH TOP 15 ---
+    # --- ОТЧЁТ GROWTH TOP-15 (без статистики, но можно добавить при желании) ---
     lines2 = []
     lines2.append("="*60)
     lines2.append(f"🚀 GROWTH TOP-15 (высокий потенциал роста) | {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -390,10 +436,10 @@ def run():
         pe = m.get('pe')
         lines2.append(f"{i}. {ticker} ({region}) | Score: {score:.2f}")
         detail = []
-        if rev is not None: detail.append(f"Рост выручки: {rev*100:.1f}%")
-        if eps is not None: detail.append(f"Рост EPS: {eps*100:.1f}%")
-        if roe is not None: detail.append(f"ROE: {roe*100:.1f}%")
-        if pe is not None: detail.append(f"P/E: {pe:.1f}")
+        if rev is not None and isinstance(rev, (int,float)): detail.append(f"Рост выручки: {rev*100:.1f}%")
+        if eps is not None and isinstance(eps, (int,float)): detail.append(f"Рост EPS: {eps*100:.1f}%")
+        if roe is not None and isinstance(roe, (int,float)): detail.append(f"ROE: {roe*100:.1f}%")
+        if pe is not None and isinstance(pe, (int,float)): detail.append(f"P/E: {pe:.1f}")
         if detail:
             lines2.append("   " + " | ".join(detail))
         lines2.append("")
