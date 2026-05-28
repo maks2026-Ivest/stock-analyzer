@@ -377,7 +377,7 @@ def run():
     top_growth = growth_list[:15]
     
     total_analyzed = len(all_metrics)
-    peg_values = [m['peg'] for _,_,_,m in all_metrics if m.get('peg') is not None and isinstance(m['peg'], (int,float))]
+    peg_values = [m['peg'] for _,_,m in all_metrics if m.get('peg') is not None and isinstance(m['peg'], (int,float))]
     avg_peg = np.mean(peg_values) if peg_values else 0
     
     # --- ОТЧЁТ VALUE TOP-15 (со статистикой) ---
