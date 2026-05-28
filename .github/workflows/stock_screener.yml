@@ -3,7 +3,7 @@ name: Анализ акций
 on:
   workflow_dispatch:
   schedule:
-    - cron: '*/5 * * * *'
+    - cron: '30 18 * * 1,3,5'
 
 jobs:
   scan:
