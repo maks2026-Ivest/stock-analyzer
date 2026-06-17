@@ -424,7 +424,7 @@ def run():
     lines1.append("="*60)
     lines1.append("⚠️ Не ИИР. Изучите бизнес самостоятельно.")
     
-    # --- ОТЧЁТ GROWTH TOP-15 (без статистики, но можно добавить при желании) ---
+    # --- ОТЧЁТ GROWTH TOP-15 (с предупреждениями о дороговизне) ---
     lines2 = []
     lines2.append("="*60)
     lines2.append(f"🚀 GROWTH TOP-15 (высокий потенциал роста) | {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -434,7 +434,16 @@ def run():
         eps = m.get('eps_growth')
         roe = m.get('roe')
         pe = m.get('pe')
-        lines2.append(f"{i}. {ticker} ({region}) | Score: {score:.2f}")
+        peg = m.get('peg')
+        
+        # Формируем предупреждения
+        expensive = ""
+        if pe is not None and isinstance(pe, (int, float)) and pe > 25:
+            expensive = " ⚠️ ДОРОГО (P/E>25)"
+        if peg is not None and isinstance(peg, (int, float)) and peg > 1.5:
+            expensive += " ⚠️ PEG>1.5"
+        
+        lines2.append(f"{i}. {ticker} ({region}) | Score: {score:.2f}{expensive}")
         detail = []
         if rev is not None and isinstance(rev, (int,float)): detail.append(f"Рост выручки: {rev*100:.1f}%")
         if eps is not None and isinstance(eps, (int,float)): detail.append(f"Рост EPS: {eps*100:.1f}%")
